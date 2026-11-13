@@ -1,7 +1,7 @@
 // The shell's service worker: the page's own files, cache-first, so it opens with no network.
 // It never touches GitHub's API: the snapshot, photos and papers live in IndexedDB (keyed by path), not here.
 // VERSION is stamped by scripts/publish-phone-page.mjs (a hash of the shell); a new value replaces the old cache.
-const VERSION = '6b029292530e';
+const VERSION = 'v6b029292530e';
 const CACHE = `mmis-shell-${VERSION}`;
 const SHELL = [
   './', './index.html', './app.css', './manifest.webmanifest',
