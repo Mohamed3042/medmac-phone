@@ -1,0 +1,23 @@
+{
+  "name": "Medmac",
+  "short_name": "Medmac",
+  "description": "A read-only copy of the Medmac Internal System for when the PC is off.",
+  "id": "./",
+  "start_url": "./#/projects",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FBF7EF",
+  "theme_color": "#FBF7EF",
+  "lang": "en",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ],
+  "shortcuts": [
+    { "name": "Dues", "url": "./#/dues" },
+    { "name": "Equipment", "url": "./#/equipment" }
+  ]
+}
