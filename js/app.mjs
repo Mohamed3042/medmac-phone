@@ -1,5 +1,5 @@
 // The Medmac phone page: a read-only copy of the Internal System's main lists for when the PC is off.
-// Shell: header with "As of …", the screen, a bottom bar. Data: the snapshot the PC pushes to the private data repo,
+// Shell: header with "Changed …" (when the data last changed on the PC), the screen, a bottom bar. Data: the snapshot the PC pushes to the private data repo,
 // read with a key kept on this phone, kept in IndexedDB so the page opens with no network.
 import { DATA_REPO, SNAPSHOT_PATH, SLOT, BORROW } from './config.mjs';
 import * as C from './core.mjs';

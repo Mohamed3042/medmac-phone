@@ -478,7 +478,7 @@ export function moreScreen(ui, snap, info) {
   add(page, h('section', { class: 'about' },
     h('h2', null, 'This copy'),
     h('p', { class: 'ro' }, icon('lock', 'ic tiny'), 'Read-only copy. Changes are made on the PC or through the live link.'),
-    facts([['Made on the PC', snap ? C.asOf(snap.madeAt, Date.now()).replace(/^As of /, '') : ''], ['Last checked', info.checkedAt ? C.agoWords(info.checkedAt) : 'not yet'],
+    facts([['Last change on the PC', snap ? C.asOf(snap.madeAt, Date.now()).replace(/^Changed /, '') : ''], ['Last checked', info.checkedAt ? C.agoWords(info.checkedAt) : 'not yet'],
       ['App version', snap && snap.appVersion], ['Kept on this phone', info.cache], ['Key', info.keyFrom === 'launcher' ? 'the MK Launcher key on this phone' : 'pasted on this phone']]),
     h('div', { class: 'about-btns' },
       h('button', { class: 'btn wide', type: 'button', onclick: info.refresh }, icon('refresh'), 'Check for a newer copy'),

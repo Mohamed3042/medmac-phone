@@ -170,7 +170,7 @@ export function agoWords(ms, now = Date.now()) {
   return n(Math.floor(s / 86400), 'day');
 }
 const sameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
-/** "As of 14:53 (2 hours ago)", "As of yesterday 14:53 (19 hours ago)", "As of Tue 11 Nov, 14:53 (3 days ago)". */
+/** "Changed 14:53 (2 hours ago)", "Changed yesterday 14:53 (19 hours ago)", "Changed Tue 11 Nov, 14:53 (3 days ago)". */
 export function asOf(madeAt, now = Date.now()) {
   const ms = toMs(madeAt);
   if (!ms) return '';
@@ -178,7 +178,7 @@ export function asOf(madeAt, now = Date.now()) {
   const clock = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
   const day = sameDay(d, today) ? '' : sameDay(d, yest) ? 'yesterday '
     : `${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}, `;
-  return `As of ${day}${clock} (${agoWords(ms, now)})`;
+  return `Changed ${day}${clock} (${agoWords(ms, now)})`;
 }
 /** How old the copy is: 'fresh' (< 1 h), 'old' (< 1 day), 'stale'. */
 export function ageLevel(madeAt, now = Date.now()) {
