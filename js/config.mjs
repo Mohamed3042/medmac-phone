@@ -3,6 +3,7 @@ export const DATA_REPO = 'Mohamed3042/medmac-reference-set';
 
 export const API = 'https://api.github.com';
 export const SNAPSHOT_PATH = '_phone/snapshot.json';
+export const SERVER_PATH = '_phone/server.json'; // the office server's copy (optional; written by the sync machine, docs/SERVER-SYNC.md)
 
 // What this page keeps on the phone (localStorage). The MK Launcher Backup lives on the same github.io origin;
 // its key is tried silently first (read only, never changed or removed by this page).

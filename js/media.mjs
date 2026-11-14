@@ -23,8 +23,8 @@ function urlFor(key, blob) {
 export function revokeAll() { for (const u of urls.values()) URL.revokeObjectURL(u); urls.clear(); missing.clear(); }
 
 /** The file as a Blob: from the phone if kept, else from GitHub (then kept). Throws GhError. */
-export async function fileBlob(rel, { onProgress } = {}) {
-  if (fileKind(rel) === 'pc-only') throw new GhError('missing');
+export async function fileBlob(rel, { onProgress, any = false } = {}) {
+  if (!any && fileKind(rel) === 'pc-only') throw new GhError('missing');
   if (missing.has(rel)) throw new GhError('missing');
   const kept = await getFileBlob(rel);
   if (kept) return kept;
@@ -178,7 +178,8 @@ export function closeViewer() {
 // ---------- papers: a sheet with Open and Save ----------
 let sheetEl = null;
 export function closeSheet() { if (sheetEl) { sheetEl.remove(); sheetEl = null; document.documentElement.classList.remove('locked'); } }
-export function openFile(rel, { title, sub } = {}) {
+// any: the file is known to be in the repo (an office-server file "in the set"), so even a type the phone rarely opens is fetched and offered to save.
+export function openFile(rel, { title, sub, any = false } = {}) {
   closeSheet();
   const name = baseName(rel);
   const status = h('p', { class: 'fs-status' });
@@ -194,9 +195,9 @@ export function openFile(rel, { title, sub } = {}) {
   document.body.append(sheetEl);
   document.documentElement.classList.add('locked');
   card.querySelector('button').focus();
-  if (fileKind(rel) === 'pc-only') { status.className = 'fs-status pc'; status.append(icon('pc'), ERRORS.missing); return; }
+  if (!any && fileKind(rel) === 'pc-only') { status.className = 'fs-status pc'; status.append(icon('pc'), ERRORS.missing); return; }
   status.textContent = 'Getting the file…';
-  fileBlob(rel).then((blob) => {
+  fileBlob(rel, { any }).then((blob) => {
     if (!card.isConnected) return;
     const u = urlFor(rel, blob);
     status.textContent = `${Math.max(1, Math.round(blob.size / 1024)).toLocaleString('en-GB')} KB · kept on this phone`;

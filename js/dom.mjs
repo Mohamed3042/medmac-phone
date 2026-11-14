@@ -42,6 +42,7 @@ const P = {
   lock: '<rect x="5" y="10.5" width="14" height="10" rx="1"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/>',
   save: '<path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19.5h14"/>',
   open: '<path d="M13.5 4.5h6v6M19.5 4.5l-8 8M17.5 13.5v6h-13v-13h6"/>',
+  server: '<rect x="4.5" y="3.5" width="15" height="7" rx="1"/><rect x="4.5" y="13.5" width="15" height="7" rx="1"/><path d="M8 7h.01M8 17h.01M12 7h4M12 17h4"/>',
   photo: '<rect x="3.5" y="5.5" width="17" height="13" rx="1"/><circle cx="9" cy="10" r="1.6"/><path d="M4 17l5-4.5 3.5 3 3-2.5 4.5 4"/>',
 };
 export function icon(name, cls = 'ic') {
@@ -95,15 +96,16 @@ export function contactCard(c, extra) {
     c.notes ? note(c.notes) : null);
 }
 
-/** One list row: link, optional thumb, title (+ Arabic), meta line, and an end column. */
-export function row({ href, thumb, title, titleAr, meta, meta2, end, cls = '' }) {
+/** One list row: link, optional thumb, title (+ Arabic), up to three meta lines, and an end column. */
+export function row({ href, thumb, title, titleAr, meta, meta2, meta3, end, cls = '' }) {
   return h('a', { class: `row ${cls}`.trim(), href },
     thumb || null,
     h('span', { class: 'rtx' },
       txt(title || '—', 'rn'),
       titleAr ? ar(titleAr, 'rar') : null,
       meta ? (meta.nodeType ? meta : h('span', { class: 'rm', dir: 'auto' }, meta)) : null,
-      meta2 ? (meta2.nodeType ? meta2 : h('span', { class: 'rm', dir: 'auto' }, meta2)) : null),
+      meta2 ? (meta2.nodeType ? meta2 : h('span', { class: 'rm', dir: 'auto' }, meta2)) : null,
+      meta3 ? (meta3.nodeType ? meta3 : h('span', { class: 'rm', dir: 'auto' }, meta3)) : null),
     end ? h('span', { class: 'rend' }, end) : null,
     icon('chev', 'ic chev'));
 }

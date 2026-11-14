@@ -54,6 +54,13 @@ a { color: inherit; -webkit-touch-callout: default; }
 .asof-main { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .asof.stale .asof-main { color: var(--amber); font-weight: 600; }
 .asof.stale .asof-main::before { content: ''; display: inline-block; width: 6px; height: 6px; margin-inline-end: 6px; border-radius: 50%; background: var(--amber); vertical-align: 1px; }
+/* the office server's copy: a quiet second line with the same age colours (dot: green fresh, amber old, amber + bold stale), grey "never" */
+.asof-srv { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10.5px; color: var(--grey-3); }
+.asof-srv::before { content: ''; display: inline-block; width: 6px; height: 6px; margin-inline-end: 6px; border-radius: 50%; background: var(--line-2); vertical-align: 1px; }
+.asof-srv.fresh::before { background: var(--green); }
+.asof-srv.old::before { background: var(--amber); }
+.asof-srv.stale { color: var(--amber); font-weight: 600; }
+.asof-srv.stale::before { background: var(--amber); }
 .asof-why { font: 700 9px/1 var(--ui); letter-spacing: .14em; text-transform: uppercase; color: var(--grey-3); }
 .asof.problem .asof-why { color: var(--red-2); }
 .refresh { width: 44px; height: 44px; display: grid; place-items: center; padding: 0; border: 0; background: transparent; color: var(--grey-2); cursor: pointer; border-radius: 50%; }
@@ -263,6 +270,38 @@ h1 { margin: 0; font: 600 29px/1.12 var(--display); color: var(--ink); overflow-
 .frow { display: flex; align-items: center; gap: 13px; width: 100%; min-height: 64px; padding: 9px 0; border: 0; border-bottom: 1px solid var(--line); background: transparent; text-align: start; cursor: pointer; }
 .frow:active { background: var(--cream); }
 .frow .rn { font-size: 14.5px; font-weight: 500; }
+/* office-server files: where each one is (In the set / In cloud storage / office server only / gone) */
+.srow { color: inherit; text-decoration: none; }
+div.srow { cursor: default; }
+.srow .chev { flex: none; }
+.wb { align-self: flex-start; margin-top: 2px; font: 700 9px/1.2 var(--ui); letter-spacing: .12em; text-transform: uppercase; padding: 3px 6px; border: 1px solid var(--card-line); background: var(--white); color: var(--grey-3); }
+.wb-set { border-color: #A9C7AE; color: var(--green); background: var(--green-bg); }
+.wb-drive { border-color: var(--line-2); color: var(--gold-ink); background: var(--cream); }
+.wb-server { text-transform: none; letter-spacing: .02em; font-weight: 600; font-size: 11px; }
+.wb-gone { text-transform: none; letter-spacing: .02em; font-weight: 600; font-size: 11px; color: var(--grey-3); }
+.srow.w-server .rn, .srow.w-gone .rn { color: var(--grey-3); }
+.srow.w-server .fext, .srow.w-gone .fext { background: var(--card-line); color: var(--grey-2); }
+.srow.w-gone .rn { text-decoration: line-through; }
+.row .wb { margin-top: 3px; }
+.rm.srv { color: var(--gold-ink); font-weight: 600; }
+.showmore { margin: 14px 0 4px; }
+.dsec > h2 + .rows { border-top: 0; }
+
+/* Office server: the lights */
+.lights { margin-top: 6px; border-top: 1px solid var(--line); }
+.light { display: flex; align-items: flex-start; gap: 12px; padding: 11px 0 12px; border-bottom: 1px solid var(--line); }
+.light .rn { font-size: 14.5px; }
+.ldot { flex: none; width: 10px; height: 10px; margin-top: 5px; border-radius: 50%; background: var(--line-2); }
+.l-ok .ldot { background: var(--green); }
+.l-amber .ldot { background: var(--amber); }
+.l-red .ldot { background: var(--red-2); }
+.l-off .ldot { background: transparent; border: 1.5px solid var(--line-2); }
+.l-info .ldot { background: var(--gold); }
+.srv-stats { margin-top: 18px; }
+.srv-stats .stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.srv-stats .stat:nth-child(n + 4) { border-top: 1px solid var(--line); }
+.srv-stats .stat:nth-child(4) { border-inline-start: 0; }
+.srv-stats .stat b { font-size: 18px; overflow-wrap: anywhere; }
 
 /* dues */
 .dgroup { padding: 14px 0 4px; border-bottom: 2px solid var(--ink); }

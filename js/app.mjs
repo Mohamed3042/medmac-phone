@@ -1,7 +1,7 @@
 // The Medmac phone page: a read-only copy of the Internal System's main lists for when the PC is off.
 // Shell: header with "Changed …" (when the data last changed on the PC), the screen, a bottom bar. Data: the snapshot the PC pushes to the private data repo,
 // read with a key kept on this phone, kept in IndexedDB so the page opens with no network.
-import { DATA_REPO, SNAPSHOT_PATH, SLOT, BORROW } from './config.mjs';
+import { DATA_REPO, SNAPSHOT_PATH, SERVER_PATH, SLOT, BORROW } from './config.mjs';
 import * as C from './core.mjs';
 import { getFile, tryKey, rate } from './gh.mjs';
 import * as store from './store.mjs';
@@ -14,7 +14,9 @@ const ls = {
   set(k, v) { try { localStorage.setItem(k, v); return true; } catch { return false; } },
   del(k) { try { localStorage.removeItem(k); } catch { /* blocked */ } },
 };
-const S = { snap: null, checkedAt: 0, checking: false, problem: '', key: '', keyFrom: '', screenState: new Map(), scroll: new Map(), depth: 0 };
+// server: the office server's copy (`_phone/server.json`, optional: null when there is none); serverKeptAt: when this phone stored it;
+// reached: GitHub answered in this visit (the Office server page's GitHub light)
+const S = { snap: null, server: null, serverKeptAt: 0, reached: false, checkedAt: 0, checking: false, problem: '', key: '', keyFrom: '', screenState: new Map(), scroll: new Map(), depth: 0 };
 
 // ---------- the key ----------
 function borrowed() {
@@ -62,6 +64,22 @@ async function loadKept() {
     return await C.readSnapshot(e.json, async (file) => { const p = await store.getSnap(`_phone/${file}`); if (!p) throw new Error('not kept'); return p.json; });
   } catch { return null; }
 }
+/** The office server's copy this phone kept (null when none or unreadable). */
+async function loadKeptServer() {
+  const e = await store.getSnap(SERVER_PATH);
+  const srv = await C.optionalServer(async () => e && e.json);
+  if (srv) S.serverKeptAt = e.at || 0;
+  return srv;
+}
+/** Fetches `_phone/server.json` next to the snapshot. Optional: a 404, a broken file or any error keeps what the phone has. -> did it change? */
+async function refreshServer() {
+  let changed = false;
+  const next = await C.optionalServer(async () => { const r = await fetchJson(SERVER_PATH); changed = r.changed; return r.json; });
+  if (!next) return false;
+  S.serverKeptAt = changed || !S.serverKeptAt ? Date.now() : S.serverKeptAt;
+  if (changed || !S.server) { S.server = next; return true; }
+  return false;
+}
 async function fetchJson(path) {
   const kept = await store.getSnap(path);
   const r = await getFile(path, { key: S.key, etag: kept && kept.json ? kept.etag : '' });
@@ -81,9 +99,13 @@ function refresh() {
       const entry = await fetchJson(SNAPSHOT_PATH);
       let changed = entry.changed;
       const snap = await C.readSnapshot(entry.json, async (file) => { const p = await fetchJson(`_phone/${file}`); changed = changed || p.changed; return p.json; });
-      S.checkedAt = Date.now(); S.problem = '';
-      if (changed || !S.snap) { S.snap = snap; render(); }
+      S.checkedAt = Date.now(); S.problem = ''; S.reached = true;
+      const serverChanged = await refreshServer();
+      const snapChanged = changed || !S.snap;
+      if (snapChanged) S.snap = snap;
+      if (snapChanged || serverChanged) render();
     } catch (e) {
+      S.reached = false;
       if (e.code === 'key') { S.checking = false; refreshing = null; return keyFailed(); }
       S.problem = e.code === 'missing' ? 'access' : e.code || 'down';
       if (!S.snap && S.problem === 'access') { showConnect(C.ERRORS.access); }
@@ -118,6 +140,9 @@ function drawStatus() {
   const level = C.ageLevel(S.snap.madeAt);
   statusEl.className = `asof ${level}${S.problem ? ' problem' : ''}`;
   statusEl.append(h('span', { class: 'asof-main' }, C.asOf(S.snap.madeAt)));
+  // the office server's copy, a quiet second line coloured by its own age (fresh < 5 h, old < 26 h, stale), "never" in grey
+  const srvAt = S.server ? S.server.copiedAt : '';
+  statusEl.append(h('span', { class: `asof-srv ${C.serverAge(srvAt)}` }, C.serverLine(srvAt)));
   const why = S.problem === 'offline' ? 'Offline' : S.problem === 'rate' ? 'GitHub limit reached' : S.problem === 'access' ? 'Key can’t see the data' : S.problem ? 'GitHub unreachable' : S.checking ? 'checking…' : '';
   if (why) statusEl.append(h('span', { class: 'asof-why' }, why));
 }
@@ -185,7 +210,7 @@ function confirmForget() {
 async function forget() {
   ls.del(SLOT.key); ls.del(SLOT.keyFrom); ls.del(SLOT.ui);
   ls.set(SLOT.noBorrow, '1'); // the launcher's key stays the launcher's; this page stops using it until asked
-  S.key = ''; S.snap = null; S.checkedAt = 0; S.screenState.clear(); S.scroll.clear();
+  S.key = ''; S.snap = null; S.server = null; S.serverKeptAt = 0; S.reached = false; S.checkedAt = 0; S.screenState.clear(); S.scroll.clear();
   media.revokeAll(); media.closeViewer(); media.closeSheet();
   await store.wipe();
   try { for (const k of await caches.keys()) if (k.startsWith('mmis-')) await caches.delete(k); } catch { /* no Cache Storage */ }
@@ -196,6 +221,8 @@ async function forget() {
 // ---------- routes ----------
 const ui = {
   state(key) { if (!S.screenState.has(key)) S.screenState.set(key, {}); return S.screenState.get(key); },
+  get server() { return S.server; },
+  get net() { return { reached: S.reached, checkedAt: S.checkedAt, keptAt: S.serverKeptAt, online: navigator.onLine !== false }; },
   back(fallback) { if (S.depth > 0) history.back(); else replaceTo(fallback); },
   viewer(items, at, base) {
     if (!items.length) return;
@@ -233,7 +260,8 @@ async function render() {
     case 'suppliers': node = id ? V.supplierPage(ui, snap, id) : V.suppliersList(ui, snap); break;
     case 'equipment': node = id === 'stock' ? V.equipmentScreen(ui, snap, 'stock') : id ? V.equipmentPage(ui, snap, id, sub) : V.equipmentScreen(ui, snap); break;
     case 'workforce': node = id ? V.workerPage(ui, snap, id) : V.workforceList(ui, snap); break;
-    case 'quotations': node = id ? V.quotationPage(ui, snap, id) : V.quotationsList(ui, snap); break;
+    case 'quotations': node = id === 'archive' ? V.archiveQuotePage(ui, snap, sub[0]) : id ? V.quotationPage(ui, snap, id) : V.quotationsList(ui, snap); break;
+    case 'server': node = id === 'p' ? V.serverProjectPage(ui, snap, sub[0]) : id === 'projects' ? V.serverProjects(ui, snap) : V.serverScreen(ui, snap); break;
     case 'drawings': node = id ? V.drawingPage(ui, snap, id) : V.drawingsList(ui, snap); break;
     case 'more': node = V.moreScreen(ui, snap, { checkedAt: S.checkedAt, keyFrom: S.keyFrom, cache: C.fmtSize(await store.cacheBytes()), refresh: () => refresh(), forget: confirmForget }); break;
     default: replaceTo('#/projects'); return;
@@ -245,7 +273,7 @@ async function render() {
   window.scrollTo(0, y || 0);
 }
 function markTab(area) {
-  const home = { suppliers: 'more', workforce: 'more', quotations: 'more', drawings: 'more' }[area] || area || 'projects';
+  const home = { suppliers: 'more', workforce: 'more', quotations: 'more', drawings: 'more', server: 'more' }[area] || area || 'projects';
   for (const a of barEl.querySelectorAll('a')) if (a.dataset.tab === home) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
 }
 window.addEventListener('hashchange', (e) => {
@@ -293,6 +321,7 @@ async function start() {
   document.documentElement.classList.remove('connecting');
   mainEl = null;
   S.snap = S.snap || await loadKept();
+  S.server = S.server || await loadKeptServer();
   shell();
   history.replaceState({ d: 0 }, '', !location.hash || location.hash === '#' ? '#/projects' : location.href);
   S.depth = 0;

@@ -34,7 +34,9 @@ export function listScreen(ui, opts) {
   const body = h('div', { class: 'rows' });
   add(page, showing, body);
 
-  let list = [], drawn = 0, sentinel = null;
+  // pageSize: long lists (the quotation archive) draw that many and end with a "Show more" button instead of scrolling on forever
+  const step = opts.pageSize || CHUNK;
+  let list = [], drawn = 0, sentinel = null, moreBtn = null;
   const more = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) drawMore(); }, { rootMargin: '600px 0px' });
   function filtered() {
     let items = opts.items;
@@ -45,13 +47,15 @@ export function listScreen(ui, opts) {
     list = filtered();
     clear(body); drawn = 0;
     const n = list.length, all = opts.items.length;
-    showing.textContent = n === all ? `${all} ${all === 1 ? opts.one || 'item' : opts.many || 'items'}` : `Showing ${n} of ${all}`;
+    const fmt = (v) => v.toLocaleString('en-GB');
+    showing.textContent = n === all ? `${fmt(all)} ${all === 1 ? opts.one || 'item' : opts.many || 'items'}` : `Showing ${fmt(n)} of ${fmt(all)}`;
     if (!n) { body.append(h('div', { class: 'empty' }, h('p', null, all ? 'Nothing matches. Try fewer words.' : opts.empty || 'Nothing here yet.'))); return; }
-    drawMore(Math.max(CHUNK, st.shown || 0));
+    drawMore(Math.max(step, st.shown || 0));
   }
   let lastGroup = null;
-  function drawMore(count = CHUNK) {
+  function drawMore(count = step) {
     if (sentinel) { more.unobserve(sentinel); sentinel.remove(); sentinel = null; }
+    if (moreBtn) { moreBtn.remove(); moreBtn = null; }
     if (drawn === 0) lastGroup = null;
     const end = Math.min(list.length, drawn + count);
     const frag = document.createDocumentFragment();
@@ -62,7 +66,11 @@ export function listScreen(ui, opts) {
     }
     body.append(frag);
     drawn = end; st.shown = drawn;
-    if (drawn < list.length) { sentinel = h('div', { class: 'sentinel' }); body.append(sentinel); more.observe(sentinel); }
+    if (drawn < list.length && opts.pageSize) {
+      const left = list.length - drawn;
+      moreBtn = h('button', { class: 'btn wide showmore', type: 'button', onclick: () => drawMore(step) }, `Show ${Math.min(step, left)} more · ${left.toLocaleString('en-GB')} left`);
+      body.append(moreBtn);
+    } else if (drawn < list.length) { sentinel = h('div', { class: 'sentinel' }); body.append(sentinel); more.observe(sentinel); }
   }
   let t = 0;
   input.addEventListener('input', () => { clearTimeout(t); clearBtn.hidden = !input.value; t = setTimeout(() => { st.q = input.value; st.shown = 0; draw(); }, 80); });
@@ -101,6 +109,66 @@ const fileRows = (files) => h('div', { class: 'files' }, files.map((f) => h('but
   h('span', { class: `fext ${C.fileKind(f.rel)}` }, (C.fileExt(f.rel) || '?').toUpperCase().slice(0, 4)),
   h('span', { class: 'rtx' }, txt(f.title, 'rn'), f.sub ? h('span', { class: 'rm', dir: 'auto' }, f.sub) : null),
   icon('chev', 'ic chev'))));
+
+// ---------- the office server's files: four states everywhere ----------
+const WHERE_TEXT = { set: 'In the set', drive: 'In cloud storage', server: 'only on the office server', gone: 'Gone from the server' };
+/**
+ * One file of the server index: In the set (opens from the data repo like a paper), In cloud storage (`d`: a plain link for a Drive id,
+ * no link yet for an R2 path),
+ * only on the office server (greyed), Gone from the server (greyed, struck through).
+ */
+export function serverFileRow(r, { title } = {}) {
+  const w = C.whereOf(r);
+  const url = w === 'drive' ? C.driveUrl(r.d) : '';
+  const name = title || C.baseName(r.p);
+  const folder = String(r.p || '').split('/').slice(0, -1).join('/');
+  const ext = C.fileExt(r.p);
+  const meta = join(r.s ? C.fmtSize(r.s) : '', r.m ? C.fmtDay(Math.min(r.m, Date.now())) : '', w === 'gone' && r.x ? `gone since ${C.fmtDay(r.x)}` : '');
+  const kids = [
+    // the tile's colour says the type only; greying is the row's job (server-only and gone rows), so no "pc-only" grey here
+    h('span', { class: `fext ${C.fileKind(r.p) === 'pc-only' ? 'file' : C.fileKind(r.p)} ${ext}` }, (ext || '?').toUpperCase().slice(0, 4)),
+    h('span', { class: 'rtx' }, txt(name, 'rn'), folder ? h('span', { class: 'rm path', dir: 'auto' }, folder) : null, meta ? h('span', { class: 'rm' }, meta) : null,
+      h('span', { class: `wb wb-${w}` }, WHERE_TEXT[w])),
+  ];
+  const cls = `frow srow w-${w}`;
+  if (w === 'set') return h('button', { class: cls, type: 'button', onclick: () => openFile(C.setPath(r.p), { title: name, sub: folder, any: true }) }, kids, icon('chev', 'ic chev'));
+  if (url) return h('a', { class: cls, href: url, target: '_blank', rel: 'noopener noreferrer' }, kids, icon('open', 'ic chev'));
+  return h('div', { class: cls, title: w === 'gone' ? 'This file is no longer on the office server' : w === 'drive' ? 'In cloud storage; opening it from the phone comes later' : 'Only on the office server' }, kids);
+}
+export const serverFileList = (rows) => h('div', { class: 'files' }, arr(rows).map((r) => serverFileRow(r)));
+/** Draws `step` rows, then a Show more button for the next step. */
+function moreRows(items, rowOf, stepN = 20) {
+  const box = h('div', { class: 'rows' });
+  let drawn = 0, btn = null;
+  const draw = () => {
+    if (btn) { btn.remove(); btn = null; }
+    const end = Math.min(items.length, drawn + stepN);
+    for (let i = drawn; i < end; i++) box.append(rowOf(items[i]));
+    drawn = end;
+    if (drawn < items.length) { btn = h('button', { class: 'btn wide showmore', type: 'button', onclick: draw }, `Show more · ${(items.length - drawn).toLocaleString('en-GB')} left`); box.append(btn); }
+  };
+  draw();
+  return box;
+}
+const STATUS = { done: 'Done', ongoing: 'Ongoing', discussion: 'In discussion', tender: 'Tender' };
+function archiveRow(q, { mark = true } = {}) {
+  const w = C.whereOf(q);
+  return row({ href: `#/quotations/archive/${encodeURIComponent(q.id)}`, title: q.subject || q.ref || C.baseName(q.p),
+    meta: join(q.ref || q.number, q.to), meta2: q.date ? C.fmtDay(q.date) : q.year ? String(q.year) : '',
+    meta3: h('span', { class: `wb wb-${w}` }, WHERE_TEXT[w]),
+    end: (q.total || mark) ? h('span', { class: 'lend' }, q.total ? h('span', { class: 'amtcol' }, C.fmtKwd(q.total)) : null, mark ? chip('Archive') : null) : null });
+}
+function serverProjectRow(p) {
+  return row({ href: `#/server/p/${encodeURIComponent(p.id)}`, title: p.name, meta: join(p.owner, STATUS[p.status] || ''),
+    meta2: join(`${(p.records || 0).toLocaleString('en-GB')} file${p.records === 1 ? '' : 's'}`, p.newest ? `newest ${C.fmtDay(Math.min(p.newest, Date.now()))}` : '') });
+}
+function serverSections(ui, customerId) {
+  const side = C.serverSide(ui.server, customerId);
+  return [
+    section(`Quotations from the office archive${side.quotations.length ? ` · ${side.quotations.length}` : ''}`, side.quotations.length ? moreRows(side.quotations, (q) => archiveRow(q, { mark: false })) : null),
+    section(`Projects on the office server${side.projects.length ? ` · ${side.projects.length}` : ''}`, side.projects.length ? moreRows(side.projects, serverProjectRow) : null),
+  ];
+}
 
 // ---------- Projects ----------
 export function projectsList(ui, snap) {
@@ -191,7 +259,7 @@ export function customersList(ui, snap, mode) {
       rowOf: (x) => h('div', { class: 'prow' }, contactCard(x.contact, h('a', { class: 'inlink small', href: `#/customers/${encodeURIComponent(x.customerId)}`, dir: 'auto' }, x.customerName || ''))),
     });
   }
-  const items = arr(d.list);
+  const items = C.joinCustomers(d.list, ui.server ? ui.server.customers : []);
   return listScreen(ui, {
     area: 'customers', kick: 'Customers', title: 'Customers', items, seg, one: 'company', many: 'companies', placeholder: 'Search name, area, contact',
     empty: 'No customers in the copy from the PC yet.',
@@ -199,16 +267,30 @@ export function customersList(ui, snap, mode) {
     filters: [{ id: 'div', label: 'Division', all: 'All divisions', options: C.divisionsOf(items).map((id) => [id, C.division(id).en]), test: (c, v) => arr(c.divisions).includes(v) }],
     rowOf: (c) => row({
       href: `#/customers/${encodeURIComponent(c.id)}`, title: c.name, titleAr: c.nameAr,
-      meta: join(c.kindText || '', c.area, arr(c.contacts).length ? `${arr(c.contacts).length} contact${arr(c.contacts).length === 1 ? '' : 's'}` : ''),
+      meta: c.serverOnly ? 'From the office quotation archive' : join(c.kindText || '', c.area, arr(c.contacts).length ? `${arr(c.contacts).length} contact${arr(c.contacts).length === 1 ? '' : 's'}` : ''),
       meta2: Number(String(c.unpaidTotal || '0').replace(/,/g, '')) > 0 ? h('span', { class: 'rm amber' }, `${C.kwd(c.unpaidTotal)} unpaid`) : null,
+      meta3: serverCounts(c.server),
     }),
   });
+}
+function serverCounts(s) {
+  if (!s || (!s.quotations && !s.projects)) return null;
+  const n = (v, w) => (v ? `${v.toLocaleString('en-GB')} ${w}${v === 1 ? '' : 's'}` : '');
+  return h('span', { class: 'rm srv' }, join(n(s.quotations, 'archive quotation'), n(s.projects, 'server project')));
 }
 export function customerPage(ui, snap, id) {
   const d = C.areaData(snap, 'customers');
   if (!d) return areaFailed('Customers', 'Customers', C.areaError(snap, 'customers'));
   const c = arr(d.list).find((x) => x.id === id);
-  if (!c) return notFound(ui, '#/customers', 'customer');
+  if (!c) {
+    // a customer only the office server's quotation archive knows (the PC's copy has no record for it yet)
+    const s = ui.server && C.joinCustomers([], ui.server.customers).find((x) => x.id === id);
+    if (!s) return notFound(ui, '#/customers', 'customer');
+    const page = detailPage(ui, { fallback: '#/customers', backLabel: 'Customers', kick: 'Customer · office archive', title: s.name, titleAr: s.nameAr });
+    add(page, h('div', { class: 'callout' }, h('p', null, 'Known from the quotation archive on the office server. The copy from the PC has no record for it yet.')),
+      facts([['Last quotation', C.fmtDay(s.server.last)]]), serverSections(ui, s.id));
+    return page;
+  }
   const page = detailPage(ui, { fallback: '#/customers', backLabel: 'Customers', kick: 'Customer', title: c.name, titleAr: c.nameAr, chips: divChips(c.divisions) });
   const projects = arr((C.areaData(snap, 'projects') || {}).list).filter((p) => p.customerId === c.id);
   const quotes = arr((C.areaData(snap, 'quotations') || {}).list).filter((q) => q.customerId === c.id);
@@ -222,6 +304,7 @@ export function customerPage(ui, snap, id) {
     section('Projects', projects.map((p) => row({ href: `#/projects/${encodeURIComponent(p.id)}`, thumb: thumb(p.cover, { label: arr(p.divisions).length ? C.division(p.divisions[0]).short : '' }), title: p.name, titleAr: p.nameAr, meta: join(p.year, p.location) }))),
     section('Quotations', quotes.map((q) => quoteRow(q))),
     section('Files', arr(c.files).filter((f) => f.rel).length ? fileRows(arr(c.files).filter((f) => f.rel).map((f) => ({ rel: f.rel, title: f.name || C.baseName(f.rel), sub: join(f.kind, C.fmtDay(f.added), f.note) }))) : null),
+    serverSections(ui, c.id),
   );
   if (!open.length && !arr(c.dues).length) { /* nothing owed: no dues section */ }
   return page;
@@ -406,10 +489,110 @@ function quoteRow(q) {
 }
 export function quotationsList(ui, snap) {
   const d = C.areaData(snap, 'quotations');
-  if (!d) return areaFailed('Quotations', 'Quotations', C.areaError(snap, 'quotations'));
-  const items = C.sortQuotes(arr(d.list));
-  return listScreen(ui, { area: 'quotations', kick: 'Quotations', title: 'Quotations', items, one: 'quotation', many: 'quotations', placeholder: 'Search number, customer, subject',
-    empty: 'No quotations made in the app yet.', fieldsOf: C.SEARCH_FIELDS.quotations, rowOf: quoteRow });
+  const archive = ui.server ? ui.server.quotations : [];
+  if (!d && !archive.length) return areaFailed('Quotations', 'Quotations', C.areaError(snap, 'quotations'));
+  if (!archive.length) {
+    const items = C.sortQuotes(arr(d.list));
+    return listScreen(ui, { area: 'quotations', kick: 'Quotations', title: 'Quotations', items, one: 'quotation', many: 'quotations', placeholder: 'Search number, customer, subject',
+      empty: 'No quotations made in the app yet.', fieldsOf: C.SEARCH_FIELDS.quotations, rowOf: quoteRow });
+  }
+  const items = C.mergeQuotes(d ? d.list : [], archive);
+  const top = !d ? h('div', { class: 'callout warn' }, h('p', null, 'The app’s own quotations did not come through in this copy. The office archive is below.')) : null;
+  return listScreen(ui, { area: 'quotations', kick: 'Quotations · app and office archive', title: 'Quotations', items, top, one: 'quotation', many: 'quotations',
+    placeholder: 'Search number, ref, customer, subject', pageSize: 100, fieldsOf: C.SERVER_SEARCH.quotes, rowOf: (q) => (q.archive ? archiveRow(q) : quoteRow(q)) });
+}
+export function archiveQuotePage(ui, snap, id) {
+  const q = ui.server && ui.server.quotations.find((x) => x.id === id);
+  if (!q) {
+    const page = h('section', { class: 'page detail' }, backBar(ui, '#/quotations', 'Back'));
+    add(page, h('div', { class: 'empty' }, h('p', null, 'This quotation is not in the copy from the office server.')));
+    return page;
+  }
+  const page = detailPage(ui, { fallback: '#/quotations', backLabel: 'Quotations', kick: join('Archive quotation', q.year || ''), title: q.subject || q.ref || C.baseName(q.p) });
+  add(page,
+    q.total ? h('div', { class: 'owed' }, h('small', null, 'Total'), h('b', null, C.kwd(q.total))) : null,
+    facts([['Reference', q.ref], ['Date', C.fmtDay(q.date)], ['To', q.to ? (q.customerId ? linkTo(`#/customers/${encodeURIComponent(q.customerId)}`, q.to) : q.to) : ''],
+      ['Project', q.project], ['Number', join(q.number, q.by)], ['File name', C.baseName(q.p)]]),
+    section('File', serverFileList([{ p: q.p, s: q.s, m: 0, g: q.g, d: q.d, x: q.x }])),
+    h('p', { class: 'small quiet' }, 'Read from the file on the office server. Open the file for the full text and prices.'),
+  );
+  return page;
+}
+
+// ---------- Office server ----------
+const LIGHT = { fresh: 'ok', old: 'amber', stale: 'red', never: 'off', off: 'off', info: 'info' };
+function light(label, level, ...lines) {
+  return h('div', { class: `light l-${LIGHT[level] || 'info'}` }, h('span', { class: 'ldot', 'aria-hidden': 'true' }),
+    h('span', { class: 'rtx' }, h('span', { class: 'rn' }, label), lines.filter(Boolean).map((l) => h('span', { class: 'rm', dir: 'auto' }, l))));
+}
+function serverSeg(S, current) {
+  return segLinks([['#/server', 'Overview', 'overview'], ['#/server/projects', `Projects${S ? ` · ${S.projects.length}` : ''}`, 'projects']], current);
+}
+export function serverScreen(ui, snap) {
+  const S = ui.server, net = ui.net || {};
+  const now = Date.now();
+  const page = h('section', { class: 'page server' }, pageHead('Office server copy', 'Office server', null, serverSeg(S, 'overview')));
+  const age = S ? C.serverAge(S.copiedAt, now) : 'never';
+  const when = S && S.copiedAt ? C.asOf(S.copiedAt, now).replace(/^Changed /, '') : '';
+  const big = S && S.bigFiles;
+  const lights = [
+    light('Office server', age, S && S.copiedAt ? `Reached ${when}` : 'No copy from the office server yet'),
+    light(`Sync machine${S && S.machine ? ` (${S.machine})` : ''}`, age, S && S.copiedAt ? `Last run ${when}` : 'Has not written a copy yet',
+      S && S.changedAt ? `Last found a change ${C.asOf(S.changedAt, now).replace(/^Changed /, '')}` : ''),
+    light(big && big.kind === 'r2' ? 'Cloud storage (Cloudflare)' : big && big.kind && big.kind !== 'gdrive' ? 'Cloud storage' : 'Google Drive', !S ? 'never' : !big ? 'off' : big.uploadedAt ? (big.pending ? 'old' : 'fresh') : 'old',
+      !S ? '' : !big ? 'Not set up' : big.uploadedAt ? `Uploaded ${C.agoWords(C.toMs(big.uploadedAt), now)}` : 'Nothing uploaded yet',
+      big && big.pending ? `${big.pending.toLocaleString('en-GB')} files waiting (${C.fmtSize(big.pendingBytes)})` : ''),
+    light('GitHub', net.reached ? 'fresh' : net.keptAt ? 'old' : 'stale',
+      net.reached ? `Reached ${C.agoWords(net.checkedAt || now, now)}` : net.keptAt ? `Not reached; copy kept from ${C.asOf(net.keptAt, now).replace(/^Changed /, '')}` : 'Not reached'),
+    light('PCs', 'info', snap && snap.madeAt ? `PC last wrote: ${C.asOf(snap.madeAt, now).replace(/^Changed /, '')}` : 'PC last wrote: never'),
+    light('This phone', net.online === false ? 'stale' : 'fresh', net.online === false ? 'Offline' : 'Online', net.checkedAt ? `Last checked ${C.agoWords(net.checkedAt, now)}` : ''),
+  ];
+  add(page, h('div', { class: 'lights' }, lights));
+  if (!S) {
+    add(page, h('div', { class: 'callout' }, h('p', null, 'No copy from the office server yet. When the sync machine has written one, its projects, files and the quotation archive show here.')));
+    return page;
+  }
+  const c = S.counts;
+  add(page,
+    h('div', { class: 'srv-stats' }, statLine([[c.records, 'records'], [c.onGitHub, 'in the set'], [c.onDrive, 'in cloud storage'], [c.serverOnly, 'office server only'], [c.gone, 'gone']].map(([n, w]) => [n == null ? null : n.toLocaleString('en-GB'), w]))),
+    section('Warnings', S.warnings.map((w) => h('div', { class: 'callout amber' }, h('p', { dir: 'auto' }, w.text), w.at ? h('p', { class: 'small' }, C.fmtDay(w.at)) : null))),
+    section(`Latest${S.latest.length ? ` · ${S.latest.length}` : ''}`, S.latest.length ? serverFileList(S.latest) : null),
+  );
+  return page;
+}
+export function serverProjects(ui, snap) {
+  const S = ui.server;
+  if (!S) return serverScreen(ui, snap);
+  return listScreen(ui, { area: 'server-projects', kick: 'Office server copy', title: 'Office server', seg: serverSeg(S, 'projects'), items: S.projects, one: 'project', many: 'projects',
+    placeholder: 'Search project, folder, status', empty: 'No projects in the copy from the office server.', fieldsOf: C.SERVER_SEARCH.projects, rowOf: serverProjectRow });
+}
+const KIND_WORDS = [['drawings', 'drawing'], ['pdfs', 'PDF'], ['docs', 'document'], ['sheets', 'sheet'], ['photos', 'photo'], ['other', 'other']];
+export function serverProjectPage(ui, snap, id) {
+  const S = ui.server;
+  const p = S && S.projects.find((x) => x.id === id);
+  if (!p) {
+    const page = h('section', { class: 'page detail' }, backBar(ui, '#/server/projects', 'Back'));
+    add(page, h('div', { class: 'empty' }, h('p', null, 'This project is not in the copy from the office server.')));
+    return page;
+  }
+  const page = detailPage(ui, { fallback: '#/server/projects', backLabel: 'Projects', kick: join('Office server project', STATUS[p.status] || ''), title: p.name });
+  const cust = p.customerId ? C.joinCustomers(arr((C.areaData(snap, 'customers') || {}).list), S.customers).find((c) => c.id === p.customerId) : null;
+  const pd = C.areaData(snap, 'projects') || {};
+  const lib = p.libraryId ? ((pd.records || {})[p.libraryId] || arr(pd.list).find((x) => x.id === p.libraryId)) : null;
+  const kinds = KIND_WORDS.map(([k, w]) => (p.kinds[k] ? `${p.kinds[k]} ${w}${p.kinds[k] === 1 || k === 'other' ? '' : 's'}` : '')).filter(Boolean);
+  const lq = p.latestQuotation;
+  const lqArchive = lq && lq.id ? S.quotations.find((q) => q.id === lq.id) : null;
+  const lqFile = lq && !lqArchive && lq.p ? (p.recent.find((r) => r.p === lq.p) || { p: lq.p, g: 0 }) : null;
+  add(page,
+    facts([['Customer', cust ? linkTo(`#/customers/${encodeURIComponent(cust.id)}`, cust.name) : ''], ['In the projects library', lib ? linkTo(`#/projects/${encodeURIComponent(lib.id)}`, lib.name) : ''],
+      ['Folder', p.owner], ['Path', p.path], ['Files', join(`${p.records.toLocaleString('en-GB')} in all`, `${p.onGitHub.toLocaleString('en-GB')} in the set`, `${p.onDrive.toLocaleString('en-GB')} in cloud storage`)],
+      ['Size', p.bytes ? C.fmtSize(p.bytes) : ''], ['Newest file', p.newest ? C.fmtDay(Math.min(p.newest, Date.now())) : ''], ['Kinds', kinds.join(' · ')]]),
+    section('Latest quotation', lqArchive ? h('div', { class: 'rows' }, archiveRow(lqArchive, { mark: false })) : lqFile ? serverFileList([lqFile]) : null),
+    section('Latest drawing', p.latestDrawing ? serverFileList([p.latestDrawing]) : null),
+    section(`Recent files${p.recent.length ? ` · ${p.recent.length}` : ''}`, p.recent.length ? serverFileList(p.recent) : null),
+    p.records > p.recent.length ? h('p', { class: 'small quiet' }, `The ${p.recent.length} newest of ${p.records.toLocaleString('en-GB')} files. The PC app lists them all.`) : null,
+  );
+  return page;
 }
 export function quotationPage(ui, snap, id) {
   const d = C.areaData(snap, 'quotations');
@@ -469,8 +652,11 @@ export function moreScreen(ui, snap, info) {
   const areas = [
     ['suppliers', 'Suppliers', n('suppliers', (d) => arr(d.list).length)],
     ['workforce', 'Workforce', n('workforce', (d) => arr(d.list).length)],
-    ['quotations', 'Quotations', n('quotations', (d) => arr(d.list).length)],
+    ['quotations', 'Quotations', ui.server && ui.server.quotations.length
+      ? `${(n('quotations', (d) => arr(d.list).length) || 0).toLocaleString('en-GB')} + ${ui.server.quotations.length.toLocaleString('en-GB')} archive`
+      : n('quotations', (d) => arr(d.list).length)],
     ['drawings', 'Drawings', n('drawings', (d) => (d.summary && d.summary.total) || arr(d.list).length)],
+    ['server', 'Office server', ui.server && ui.server.copiedAt ? `copy ${C.agoWords(C.toMs(ui.server.copiedAt))}` : 'no copy yet'],
   ];
   const page = h('section', { class: 'page more' }, pageHead('Medmac Internal System', 'More'));
   add(page, h('nav', { class: 'tiles', 'aria-label': 'More areas' }, areas.map(([id, label, count]) => h('a', { class: 'tile', href: `#/${id}` },

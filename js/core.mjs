@@ -219,7 +219,8 @@ export function fmtSize(bytes) {
   if (!Number.isFinite(b) || b < 0) return '';
   if (b < 1024) return `${b} B`;
   if (b < MB) return `${Math.round(b / 1024)} KB`;
-  return `${(b / MB).toFixed(b < 10 * MB ? 1 : 0)} MB`;
+  if (b < 1024 * MB) return `${(b / MB).toFixed(b < 10 * MB ? 1 : 0)} MB`;
+  return `${(b / MB / 1024).toFixed(1)} GB`;
 }
 
 // ---------- phone numbers ----------
@@ -307,6 +308,124 @@ export function sortWorkers(list) {
 export function sortQuotes(list) {
   return arr(list).slice().sort((a, b) => String(b.date || b.created || '').localeCompare(String(a.date || a.created || '')) || String(b.number || '').localeCompare(String(a.number || '')));
 }
+// ---------- the office-server piece: `_phone/server.json` (contract: docs/SERVER-SYNC.md) ----------
+const str = (v) => (typeof v === 'string' ? v : v == null ? '' : typeof v === 'number' ? String(v) : '');
+const num = (v) => (Number.isFinite(Number(v)) && v !== '' && v !== null && typeof v !== 'boolean' ? Number(v) : 0);
+const pickOf = (keys, kind) => (src) => Object.fromEntries(keys.map((k) => [k, kind[k] === 'n' ? num(src[k]) : str(src[k])]));
+const FILE_KEYS = { p: 's', s: 'n', m: 'n', c: 's', g: 'n', d: 's', x: 's' };
+function fileOf(r, keys = FILE_KEYS) {
+  const o2 = obj(r);
+  if (!o2 || typeof o2.p !== 'string' || !o2.p) return null;
+  const out = pickOf(Object.keys(keys), keys)(o2);
+  if ('g' in out) out.g = out.g === 1 ? 1 : 0;
+  return out;
+}
+const RECENT_KEYS = { p: 's', s: 'n', m: 'n', g: 'n', d: 's', x: 's' };
+const CUSTOMER_KEYS = { id: 's', name: 's', nameAr: 's', quotations: 'n', projects: 'n', last: 's' };
+const QUOTE_KEYS = { id: 's', p: 's', year: 'n', number: 's', by: 's', ref: 's', date: 's', to: 's', subject: 's', project: 's', total: 's', customerId: 's', s: 'n', g: 'n', d: 's', x: 's' };
+const PROJECT_KEYS = { id: 's', name: 's', path: 's', owner: 's', status: 's', records: 'n', onGitHub: 'n', onDrive: 'n', bytes: 'n', newest: 'n', customerId: 's', libraryId: 's' };
+const KIND_KEYS = ['drawings', 'pdfs', 'docs', 'sheets', 'photos', 'other'];
+const COUNT_KEYS = ['records', 'onGitHub', 'onDrive', 'serverOnly', 'gone', 'quotations', 'customers', 'projects'];
+const BYTE_KEYS = ['server', 'onGitHub', 'budget', 'onDrive'];
+const numsOf = (v, keys) => { const o2 = obj(v); return o2 ? Object.fromEntries(keys.filter((k) => k in o2).map((k) => [k, num(o2[k])])) : {}; };
+const withId = (keys) => (r) => { const o2 = obj(r); if (!o2 || typeof o2.id !== 'string' || !o2.id) return null; return pickOf(Object.keys(keys), keys)(o2); };
+
+/**
+ * Validates the parsed `_phone/server.json` and keeps ONLY the fields of the contract (anything else is dropped).
+ * Missing parts become empty lists / {} / null. Returns null when it is not the shape at all.
+ */
+export function readServer(json) {
+  const e = obj(json);
+  if (!e) return null;
+  const big = obj(e.bigFiles);
+  return {
+    version: num(e.version) || 1, copiedAt: str(e.copiedAt), changedAt: str(e.changedAt), machine: str(e.machine),
+    counts: numsOf(e.counts, COUNT_KEYS), bytes: numsOf(e.bytes, BYTE_KEYS),
+    bigFiles: big ? { kind: str(big.kind), folder: str(big.folder), uploadedAt: str(big.uploadedAt), pending: num(big.pending), pendingBytes: num(big.pendingBytes) } : null,
+    warnings: arr(e.warnings).map(obj).filter((w) => w && str(w.text)).map((w) => ({ at: str(w.at), text: str(w.text) })),
+    latest: arr(e.latest).map((r) => fileOf(r)).filter(Boolean),
+    customers: arr(e.customers).map(withId(CUSTOMER_KEYS)).filter(Boolean),
+    quotations: arr(e.quotations).map((r) => { const q = withId(QUOTE_KEYS)(r); if (q) q.g = q.g === 1 ? 1 : 0; return q && q.p ? q : null; }).filter(Boolean),
+    projects: arr(e.projects).map((r) => {
+      const p = withId(PROJECT_KEYS)(r);
+      if (!p) return null;
+      const lq = obj(r.latestQuotation);
+      p.kinds = numsOf(r.kinds, KIND_KEYS);
+      p.latestDrawing = fileOf(r.latestDrawing, { p: 's', s: 'n', m: 'n', g: 'n', d: 's' });
+      p.latestQuotation = lq && (str(lq.id) || str(lq.p)) ? { id: str(lq.id), p: str(lq.p), ref: str(lq.ref), date: str(lq.date), total: str(lq.total) } : null;
+      p.recent = arr(r.recent).map((x) => fileOf(x, RECENT_KEYS)).filter(Boolean);
+      return p;
+    }).filter(Boolean),
+  };
+}
+/** Reads the optional piece: anything that fails (404, bad JSON, wrong shape) is "no server copy" (null), never an error. */
+export async function optionalServer(load) {
+  try { return readServer(await load()); } catch { return null; }
+}
+/** How old the server copy is: 'fresh' (< 5 h), 'old' (< 26 h), 'stale', or 'never' (no copy). */
+export function serverAge(copiedAt, now = Date.now()) {
+  const ms = toMs(copiedAt);
+  if (!ms) return 'never';
+  const h = (now - ms) / 3600000;
+  return h < 5 ? 'fresh' : h < 26 ? 'old' : 'stale';
+}
+/** "Server copy: 12:30 (2 hours ago)" or "Server copy: never". */
+export function serverLine(copiedAt, now = Date.now()) {
+  const t = asOf(copiedAt, now);
+  return `Server copy: ${t ? t.replace(/^Changed /, '') : 'never'}`;
+}
+/** Where a file of the index lives: 'set' (in the Reference Set), 'drive' (cloud storage: "gd:<Drive id>" or "r2:<path>"), 'gone' (vanished, no copy), 'server' (only there). */
+export function whereOf(row) {
+  const r = obj(row) || {};
+  if (Number(r.g) === 1) return 'set';
+  if (r.d) return 'drive';
+  if (r.x) return 'gone';
+  return 'server';
+}
+export const WHERE = { set: 'In the set', drive: 'In cloud storage', server: 'Office server only', gone: 'Gone from the server' };
+/** 'gd:<id>' -> the Drive viewer link; anything else (an 'r2:' path has no link yet, a bad id) -> ''. */
+export function driveUrl(d) {
+  const m = /^gd:([A-Za-z0-9_-]+)$/.exec(typeof d === 'string' ? d : '');
+  return m ? `https://drive.google.com/file/d/${m[1]}/view` : '';
+}
+/** A server path's place in the data repo. */
+export const setPath = (p) => `Office server/${p}`;
+/**
+ * The snapshot's customers joined with the server piece's by id: snapshot fields win; `server` = { quotations, projects, last }
+ * or null; a customer only the server piece knows comes last (by name) with `serverOnly: true`.
+ */
+export function joinCustomers(snapList, serverList) {
+  const side = new Map(arr(serverList).filter((c) => c && c.id).map((c) => [c.id, c]));
+  const seen = new Set();
+  const out = arr(snapList).map((c) => {
+    seen.add(c.id);
+    const s = side.get(c.id);
+    return { ...c, server: s ? { quotations: s.quotations || 0, projects: s.projects || 0, last: s.last || '' } : null };
+  });
+  const extra = [...side.values()].filter((s) => !seen.has(s.id))
+    .map((s) => ({ id: s.id, name: s.name || s.nameAr || s.id, nameAr: s.name ? s.nameAr : '', serverOnly: true, server: { quotations: s.quotations || 0, projects: s.projects || 0, last: s.last || '' } }))
+    .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  return out.concat(extra);
+}
+const quoteKey = (q) => String(q.date || q.created || (q.year ? String(q.year) : ''));
+/** The app's own quotations and the archive in one list, newest first; each row gets `archive: true|false`. */
+export function mergeQuotes(appList, archiveList) {
+  const all = arr(appList).map((q) => ({ ...q, archive: false })).concat(arr(archiveList).map((q) => ({ ...q, archive: true })));
+  return all.sort((a, b) => quoteKey(b).localeCompare(quoteKey(a)) || (a.archive - b.archive) || String(b.number || '').localeCompare(String(a.number || '')) || String(b.p || '').localeCompare(String(a.p || '')));
+}
+/** One customer's side of the server piece: archive quotations (newest first) and projects. */
+export function serverSide(server, customerId) {
+  if (!server || !customerId) return { quotations: [], projects: [] };
+  return {
+    quotations: mergeQuotes([], server.quotations.filter((q) => q.customerId === customerId)),
+    projects: server.projects.filter((p) => p.customerId === customerId),
+  };
+}
+export const SERVER_SEARCH = {
+  quotes: (q) => [q.number, q.ref, q.to, q.subject, q.project, q.year, q.customerName, q.projectName, q.archive ? baseName(q.p) : ''],
+  projects: (p) => [p.name, p.owner, p.status, p.path],
+};
+
 /** Distinct years, newest first. */
 export const yearsOf = (list) => [...new Set(arr(list).map((p) => p.year).filter((y) => y))].sort((a, b) => b - a);
 export const divisionsOf = (list) => { const s = new Set(arr(list).flatMap((p) => arr(p.divisions).concat(p.division ? [p.division] : []))); return DIVISIONS.map((d) => d[0]).filter((id) => s.has(id)); };
