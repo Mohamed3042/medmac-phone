@@ -44,7 +44,17 @@ const P = {
   open: '<path d="M13.5 4.5h6v6M19.5 4.5l-8 8M17.5 13.5v6h-13v-13h6"/>',
   server: '<rect x="4.5" y="3.5" width="15" height="7" rx="1"/><rect x="4.5" y="13.5" width="15" height="7" rx="1"/><path d="M8 7h.01M8 17h.01M12 7h4M12 17h4"/>',
   photo: '<rect x="3.5" y="5.5" width="17" height="13" rx="1"/><circle cx="9" cy="10" r="1.6"/><path d="M4 17l5-4.5 3.5 3 3-2.5 4.5 4"/>',
+  drop: '<rect x="5.5" y="3.5" width="13" height="8" rx="1"/><path d="M9.5 8.5h5"/><ellipse cx="12" cy="13" rx="5" ry="1.4"/><path d="M7.5 13.6l1.6 6.9M12 14.4v6.1M16.5 13.6l-1.6 6.9M8.4 17h7.2"/>',
+  drives: '<path d="M8.5 4h7l5 8.5-3.5 6h-10L3.5 12.5z"/><path d="M8.5 4l5 8.5h7M15.5 4l-8.5 14.5M3.5 12.5h10"/>',
+  folder: '<path d="M3.5 6.5h6l2 2h9v10h-17z"/>',
 };
+/** Google Drive's mark as a plain three-colour triangle (drawn here, no outside picture). */
+export function driveLogo(cls = 'drive-logo') {
+  const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  s.setAttribute('viewBox', '0 0 24 21'); s.setAttribute('class', cls); s.setAttribute('aria-hidden', 'true'); s.setAttribute('focusable', 'false');
+  s.innerHTML = '<path d="M8 1h8l8 13.5h-8z" fill="#FBBC04"/><path d="M8 1l4 6.75L4 21 0 14.25z" fill="#0F9D58"/><path d="M4 21l4-6.5h16l-4 6.5z" fill="#4285F4"/>';
+  return s;
+}
 export function icon(name, cls = 'ic') {
   const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('class', cls); s.setAttribute('aria-hidden', 'true'); s.setAttribute('focusable', 'false');

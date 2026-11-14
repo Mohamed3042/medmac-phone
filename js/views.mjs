@@ -2,6 +2,7 @@
 import * as C from './core.mjs';
 import { add, h, clear, icon, txt, ar, kicker, pageHead, facts, section, chip, divChips, note, phoneRow, contactCard, row, join } from './dom.mjs';
 import { thumb, openFile } from './media.mjs';
+import * as hub from './hubui.mjs';
 
 const { arr } = C;
 const CHUNK = 60;
@@ -110,30 +111,15 @@ const fileRows = (files) => h('div', { class: 'files' }, files.map((f) => h('but
   h('span', { class: 'rtx' }, txt(f.title, 'rn'), f.sub ? h('span', { class: 'rm', dir: 'auto' }, f.sub) : null),
   icon('chev', 'ic chev'))));
 
-// ---------- the office server's files: four states everywhere ----------
-const WHERE_TEXT = { set: 'In the set', drive: 'In cloud storage', server: 'only on the office server', gone: 'Gone from the server' };
+// ---------- the office server's files: where each one can be reached now (reach() in core.mjs, docs/HUB.md) ----------
+const WHERE_TEXT = { set: 'In the set', drive: 'In cloud storage', server: 'Only on the office server', gone: 'Gone from the server' };
 /**
- * One file of the server index: In the set (opens from the data repo like a paper), In cloud storage (`d`: a plain link for a Drive id,
- * no link yet for an R2 path),
- * only on the office server (greyed), Gone from the server (greyed, struck through).
+ * One file of the server index, drawn by the hub layer: In the set (opens from the data repo like a paper), In Google Drive
+ * (a link), In cloud storage (Open: a 5-minute link from the hub), Ask the office iMac (then queued / fetching / Open), or
+ * greyed with the reason in words (offline).
  */
 export function serverFileRow(r, { title } = {}) {
-  const w = C.whereOf(r);
-  const url = w === 'drive' ? C.driveUrl(r.d) : '';
-  const name = title || C.baseName(r.p);
-  const folder = String(r.p || '').split('/').slice(0, -1).join('/');
-  const ext = C.fileExt(r.p);
-  const meta = join(r.s ? C.fmtSize(r.s) : '', r.m ? C.fmtDay(Math.min(r.m, Date.now())) : '', w === 'gone' && r.x ? `gone since ${C.fmtDay(r.x)}` : '');
-  const kids = [
-    // the tile's colour says the type only; greying is the row's job (server-only and gone rows), so no "pc-only" grey here
-    h('span', { class: `fext ${C.fileKind(r.p) === 'pc-only' ? 'file' : C.fileKind(r.p)} ${ext}` }, (ext || '?').toUpperCase().slice(0, 4)),
-    h('span', { class: 'rtx' }, txt(name, 'rn'), folder ? h('span', { class: 'rm path', dir: 'auto' }, folder) : null, meta ? h('span', { class: 'rm' }, meta) : null,
-      h('span', { class: `wb wb-${w}` }, WHERE_TEXT[w])),
-  ];
-  const cls = `frow srow w-${w}`;
-  if (w === 'set') return h('button', { class: cls, type: 'button', onclick: () => openFile(C.setPath(r.p), { title: name, sub: folder, any: true }) }, kids, icon('chev', 'ic chev'));
-  if (url) return h('a', { class: cls, href: url, target: '_blank', rel: 'noopener noreferrer' }, kids, icon('open', 'ic chev'));
-  return h('div', { class: cls, title: w === 'gone' ? 'This file is no longer on the office server' : w === 'drive' ? 'In cloud storage; opening it from the phone comes later' : 'Only on the office server' }, kids);
+  return hub.fileRow(r, { title, openSet: (name, folder) => openFile(C.setPath(r.p), { title: name, sub: folder, any: true }) });
 }
 export const serverFileList = (rows) => h('div', { class: 'files' }, arr(rows).map((r) => serverFileRow(r)));
 /** Draws `step` rows, then a Show more button for the next step. */
@@ -178,6 +164,7 @@ export function projectsList(ui, snap) {
   return listScreen(ui, {
     area: 'projects', kick: 'Projects library', title: 'Projects', items, one: 'project', many: 'projects',
     placeholder: 'Search name, client, place', fieldsOf: C.SEARCH_FIELDS.projects,
+    top: hub.dropEntry(),
     filters: [
       { id: 'div', label: 'Division', all: 'All divisions', options: C.divisionsOf(items).map((id) => [id, C.division(id).en]), test: (p, v) => arr(p.divisions).includes(v) },
       { id: 'year', label: 'Year', all: 'All years', options: C.yearsOf(items).map((y) => [y, String(y)]), test: (p, v) => String(p.year) === v },
@@ -529,25 +516,17 @@ function serverSeg(S, current) {
   return segLinks([['#/server', 'Overview', 'overview'], ['#/server/projects', `Projects${S ? ` · ${S.projects.length}` : ''}`, 'projects']], current);
 }
 export function serverScreen(ui, snap) {
-  const S = ui.server, net = ui.net || {};
+  const S = ui.server;
   const now = Date.now();
   const page = h('section', { class: 'page server' }, pageHead('Office server copy', 'Office server', null, serverSeg(S, 'overview')));
-  const age = S ? C.serverAge(S.copiedAt, now) : 'never';
-  const when = S && S.copiedAt ? C.asOf(S.copiedAt, now).replace(/^Changed /, '') : '';
   const big = S && S.bigFiles;
-  const lights = [
-    light('Office server', age, S && S.copiedAt ? `Reached ${when}` : 'No copy from the office server yet'),
-    light(`Sync machine${S && S.machine ? ` (${S.machine})` : ''}`, age, S && S.copiedAt ? `Last run ${when}` : 'Has not written a copy yet',
-      S && S.changedAt ? `Last found a change ${C.asOf(S.changedAt, now).replace(/^Changed /, '')}` : ''),
-    light(big && big.kind === 'r2' ? 'Cloud storage (Cloudflare)' : big && big.kind && big.kind !== 'gdrive' ? 'Cloud storage' : 'Google Drive', !S ? 'never' : !big ? 'off' : big.uploadedAt ? (big.pending ? 'old' : 'fresh') : 'old',
-      !S ? '' : !big ? 'Not set up' : big.uploadedAt ? `Uploaded ${C.agoWords(C.toMs(big.uploadedAt), now)}` : 'Nothing uploaded yet',
-      big && big.pending ? `${big.pending.toLocaleString('en-GB')} files waiting (${C.fmtSize(big.pendingBytes)})` : ''),
-    light('GitHub', net.reached ? 'fresh' : net.keptAt ? 'old' : 'stale',
-      net.reached ? `Reached ${C.agoWords(net.checkedAt || now, now)}` : net.keptAt ? `Not reached; copy kept from ${C.asOf(net.keptAt, now).replace(/^Changed /, '')}` : 'Not reached'),
-    light('PCs', 'info', snap && snap.madeAt ? `PC last wrote: ${C.asOf(snap.madeAt, now).replace(/^Changed /, '')}` : 'PC last wrote: never'),
-    light('This phone', net.online === false ? 'stale' : 'fresh', net.online === false ? 'Offline' : 'Online', net.checkedAt ? `Last checked ${C.agoWords(net.checkedAt, now)}` : ''),
-  ];
-  add(page, h('div', { class: 'lights' }, lights));
+  // the bulk copy's own storage (written by the sync machine into server.json), after the hub's lights
+  const cloud = light(big && big.kind === 'r2' ? 'Cloud storage (Cloudflare)' : big && big.kind && big.kind !== 'gdrive' ? 'Cloud storage' : 'Google Drive', !S ? 'never' : !big ? 'off' : big.uploadedAt ? (big.pending ? 'old' : 'fresh') : 'old',
+    !S ? '' : !big ? 'Not set up' : big.uploadedAt ? `Uploaded ${C.agoWords(C.toMs(big.uploadedAt), now)}` : 'Nothing uploaded yet',
+    big && big.pending ? `${big.pending.toLocaleString('en-GB')} files waiting (${C.fmtSize(big.pendingBytes)})` : '');
+  // server, office iMac, GitHub, each PC, phone, hub: from the hub, or from GitHub's copy when the hub does not answer
+  add(page, hub.lightsBlock(() => { const n = ui.net || {}; return { server: ui.server, snap, reached: n.reached, checkedAt: n.checkedAt, online: n.online }; }, [cloud]));
+  add(page, hub.uploadCard(() => (ui.server ? ui.server.bigFiles : null)));
   if (!S) {
     add(page, h('div', { class: 'callout' }, h('p', null, 'No copy from the office server yet. When the sync machine has written one, its projects, files and the quotation archive show here.')));
     return page;
@@ -650,6 +629,8 @@ export function drawingPage(ui, snap, id) {
 export function moreScreen(ui, snap, info) {
   const n = (area, f) => { const d = C.areaData(snap, area); return d ? f(d) : null; };
   const areas = [
+    ['drop', 'Drop box', hub.dropTile()],
+    ['drives', 'Drives', hub.drivesTile()],
     ['suppliers', 'Suppliers', n('suppliers', (d) => arr(d.list).length)],
     ['workforce', 'Workforce', n('workforce', (d) => arr(d.list).length)],
     ['quotations', 'Quotations', ui.server && ui.server.quotations.length
@@ -660,7 +641,7 @@ export function moreScreen(ui, snap, info) {
   ];
   const page = h('section', { class: 'page more' }, pageHead('Medmac Internal System', 'More'));
   add(page, h('nav', { class: 'tiles', 'aria-label': 'More areas' }, areas.map(([id, label, count]) => h('a', { class: 'tile', href: `#/${id}` },
-    icon(id, 'ic tile-ic'), h('span', { class: 'tile-l' }, label), h('span', { class: 'tile-n' }, count == null ? 'not in this copy' : count.toLocaleString('en-GB'))))));
+    icon(id, 'ic tile-ic'), h('span', { class: 'tile-l' }, label), count === '' ? null : h('span', { class: 'tile-n' }, count == null ? 'not in this copy' : count.toLocaleString('en-GB'))))));
   add(page, h('section', { class: 'about' },
     h('h2', null, 'This copy'),
     h('p', { class: 'ro' }, icon('lock', 'ic tiny'), 'Read-only copy. Changes are made on the PC or through the live link.'),

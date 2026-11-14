@@ -7,7 +7,12 @@ export const SERVER_PATH = '_phone/server.json'; // the office server's copy (op
 
 // What this page keeps on the phone (localStorage). The MK Launcher Backup lives on the same github.io origin;
 // its key is tried silently first (read only, never changed or removed by this page).
-export const SLOT = { key: 'mmis.key', keyFrom: 'mmis.keyFrom', noBorrow: 'mmis.noBorrow', ui: 'mmis.ui' };
+export const SLOT = { key: 'mmis.key', keyFrom: 'mmis.keyFrom', noBorrow: 'mmis.noBorrow', ui: 'mmis.ui', hubDevice: 'mmis.hubDevice', sound: 'mmis.sound' };
+
+// The hub (docs/HUB.md): a private Cloudflare Worker in the company's account. The phone logs in with the same GitHub key.
+export const HUB_URL = 'https://hub.mkcloudapp.com';
+export const HUB_BEAT_MS = 60 * 1000;   // the page beats every 60 s, only while it is visible
+export const HUB_ASKS_MS = 10 * 1000;   // asks are polled while an asked row is on screen
 export const BORROW = { launcher: 'mkl.token', launcherFrom: 'mkl.tokenFrom', cinema: 'mkc.token' };
 
 export const DB_NAME = 'medmac-phone';

@@ -279,9 +279,23 @@ div.srow { cursor: default; }
 .wb-drive { border-color: var(--line-2); color: var(--gold-ink); background: var(--cream); }
 .wb-server { text-transform: none; letter-spacing: .02em; font-weight: 600; font-size: 11px; }
 .wb-gone { text-transform: none; letter-spacing: .02em; font-weight: 600; font-size: 11px; color: var(--grey-3); }
-.srow.w-server .rn, .srow.w-gone .rn { color: var(--grey-3); }
-.srow.w-server .fext, .srow.w-gone .fext { background: var(--card-line); color: var(--grey-2); }
-.srow.w-gone .rn { text-decoration: line-through; }
+.wb-cloud { border-color: var(--line-2); color: var(--gold-ink); background: var(--cream); }
+.wb-ask { text-transform: none; letter-spacing: .02em; font-weight: 600; font-size: 11px; border-color: #E6C98A; color: var(--amber); background: var(--amber-bg); }
+.wb-off { text-transform: none; letter-spacing: .02em; font-weight: 600; font-size: 11px; }
+/* greyed = nothing reachable now (reach() says offline); the reason sits under the badge */
+.srow.r-offline .rn { color: var(--grey-3); }
+.srow.r-offline .fext { background: var(--card-line); color: var(--grey-2); }
+.srow.w-gone.r-offline .rn { text-decoration: line-through; }
+.rwhy { display: flex; align-items: center; gap: 7px; font: 500 12.5px/1.45 var(--ui); color: var(--grey-2); overflow-wrap: anywhere; text-align: left; }
+.rwhy.busy { color: var(--amber); font-weight: 600; }
+.rwhy.err { color: var(--red-2); font-weight: 600; }
+.racts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.btn.rbtn { min-height: 44px; padding: 0 14px; font-size: 10px; letter-spacing: .1em; }
+.ropen { flex: none; display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px; font: 700 10px/1 var(--ui); letter-spacing: .14em; text-transform: uppercase; color: var(--red-2); border: 1px solid #E2B4B0; background: var(--white); }
+.spinner.sm { width: 13px; height: 13px; border-width: 2px; flex: none; }
+.wb-drop-uploading { border-color: #E6C98A; color: var(--amber); background: var(--amber-bg); }
+.wb-drop-ready { border-color: var(--line-2); color: var(--gold-ink); background: var(--cream); }
+.wb-drop-imported { border-color: #A9C7AE; color: var(--green); background: var(--green-bg); }
 .row .wb { margin-top: 3px; }
 .rm.srv { color: var(--gold-ink); font-weight: 600; }
 .showmore { margin: 14px 0 4px; }
@@ -402,7 +416,101 @@ div.srow { cursor: default; }
 .vw-wait { display: flex; flex-direction: column; align-items: center; gap: 12px; margin: 0; padding: 0 30px; text-align: center; font: 500 14px/1.5 var(--ui); color: #BBA77F; }
 .vw-cap { margin: 0; padding: 10px var(--gut) calc(12px + var(--sb)); font: 400 13.5px/1.5 var(--ui); color: #E2D7C2; text-align: center; }
 
+/* ---------- the hub: Drop box entry, basketball upload, Drive ---------- */
+.hubentry { display: flex; align-items: center; gap: 13px; min-height: 64px; margin: 0 0 6px; padding: 10px 12px; text-decoration: none; background: var(--white); border: 1px solid var(--card-line); border-inline-start: 3px solid var(--red); }
+.hubentry:active { background: var(--cream); }
+.hubentry .rm { color: var(--grey-2); }
+.hubentry.off .rm { color: var(--grey-3); }
+.he-ic { flex: none; width: 40px; height: 40px; display: grid; place-items: center; background: var(--cream); color: var(--red); }
+.he-ic .ic { width: 24px; height: 24px; }
+.bb { margin-top: 4px; padding: 12px; background: var(--white); border: 1px solid var(--card-line); border-top: 3px solid var(--red); }
+.bb-h { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.bb-t { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.bb-t span { font: 600 17px/1.2 var(--display); color: var(--ink); }
+.bb-t small { font: 400 12px/1.35 var(--ui); color: var(--grey-3); }
+.bb-count { flex: none; font: 700 10px/1 var(--ui); letter-spacing: .1em; text-transform: uppercase; color: var(--grey-2); background: var(--cream); padding: 8px 9px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.bb-snd { flex: none; display: inline-grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 1px solid var(--card-line); background: var(--white); cursor: pointer; font: 700 9.5px/1 var(--ui); letter-spacing: .1em; text-transform: uppercase; color: var(--grey-3); white-space: nowrap; }
+.bb-snd[aria-pressed="true"] { color: var(--red); border-color: var(--red); }
+.bb-zone { position: relative; height: 190px; border: 1.5px dashed var(--line-2); background: var(--ivory); cursor: pointer; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
+.bb-zone:active, .bb-zone.over { border-color: var(--red); background: #F7EEE4; }
+.bb-hoop { position: absolute; top: 16px; inset-inline-end: 18px; width: 92px; height: 96px; pointer-events: none; }
+.bb-msg { position: absolute; inset-inline-start: 16px; top: 20px; max-width: 54%; display: flex; flex-direction: column; gap: 4px; font: 600 15px/1.35 var(--ui); color: var(--ink); pointer-events: none; overflow-wrap: anywhere; }
+.bb-msg small { font: 400 12.5px/1.4 var(--ui); color: var(--grey-3); }
+.bb-arc { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; }
+.bb-ball { position: absolute; left: 0; top: 0; z-index: 3; width: 54px; height: 64px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; background: var(--white); border: 1px solid var(--line-2); border-radius: 3px; box-shadow: 0 4px 12px rgba(23, 17, 18, .12); cursor: grab; will-change: transform; touch-action: none; }
+.bb-ball.grab { cursor: grabbing; }
+.bb-ball b { font: 800 9px/1 var(--ui); letter-spacing: .06em; color: var(--cream); background: var(--red); padding: 3px 5px; }
+.bb-ball i { display: block; width: 26px; height: 3px; background: var(--line); box-shadow: 0 6px 0 var(--line); }
+.bb-net { transform-origin: 50% 0; transform-box: fill-box; }
+.bb-net.swish { animation: bb-swish .5s ease-out; }
+@keyframes bb-swish { 30% { transform: scaleY(1.35); } 60% { transform: scaleY(.9); } 100% { transform: scaleY(1); } }
+.bb-rows:empty { display: none; }
+.bb-rows { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.bb-row { display: flex; align-items: center; gap: 11px; padding: 10px 11px; background: var(--ivory); border: 1px solid var(--line); }
+.bb-row .badge { flex: none; width: 40px; height: 40px; display: grid; place-items: center; font: 800 9.5px/1 var(--ui); letter-spacing: .06em; color: var(--cream); background: var(--red); }
+.bb-row-tx { flex: 1; min-width: 0; }
+.bb-row .nm { text-align: left; font: 600 14px/1.3 var(--ui); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bb-prog { height: 5px; margin-top: 7px; background: #E9E0CF; overflow: hidden; }
+.bb-prog i { display: block; height: 100%; width: 0; background: var(--green); transition: width .25s linear; }
+.bb-row .st { display: flex; justify-content: space-between; gap: 8px; margin-top: 6px; font: 400 12px/1.4 var(--ui); color: var(--grey-2); }
+.bb-row .ok { color: var(--green); font-weight: 700; }
+.bb-row.err { border-color: #E2B4B0; background: var(--red-bg); }
+.bb-row.err .bb-prog i { background: var(--red); }
+.bb-row.err .st1 { color: var(--red-2); font-weight: 600; }
+.secpick { margin: 0 0 10px; }
+.secpick-l { display: flex; align-items: baseline; gap: 8px; margin: 0 0 7px; font: 700 9.5px/1.2 var(--ui); letter-spacing: .18em; text-transform: uppercase; color: var(--gold-ink); }
+.secpick-l small { font-weight: 600; letter-spacing: .1em; color: var(--grey-3); }
+.secchips { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.secchip { min-width: 0; min-height: 44px; padding: 0 8px; overflow: hidden; text-overflow: ellipsis; border: 1px solid var(--card-line); background: var(--white); cursor: pointer; font: 600 12.5px/1 var(--ui); color: var(--grey-2); white-space: nowrap; }
+.secchip[aria-checked="true"] { background: var(--ink); border-color: var(--ink); color: var(--ivory); }
+.drive-logo { width: 22px; height: 19px; flex: none; }
+.drive-logo.sm { width: 17px; height: 15px; }
+.btn.drivebtn { gap: 10px; }
+.drop .drivebtn { margin-top: 10px; min-height: 52px; }
+.drops .dsec { margin-top: 26px; }
+.drow .rtx { gap: 4px; }
+/* Add from Drive */
+.dp-title { display: flex; align-items: center; gap: 10px; }
+.dp-search { margin-top: 12px; }
+.dp-accts { display: flex; flex-wrap: wrap; margin: 12px 0 0; }
+.dp-accts .secchip { max-width: 100%; flex: 0 1 auto; }
+.dp-up { margin: 8px 0 0 -6px; }
+.sheet .showing { margin-top: 12px; }
+.dp-files { border-top: 1px solid var(--line); }
+.dp-row[disabled] { cursor: default; }
+.dp-row.added .rn { color: var(--grey-3); }
+.fext.folder { background: var(--cream); color: var(--gold-ink); }
+.fext.folder .ic { width: 22px; height: 22px; }
+.dp-add { flex: none; font: 700 10.5px/1 var(--ui); letter-spacing: .12em; text-transform: uppercase; color: var(--red-2); padding: 0 4px; }
+.sheet .wait { justify-content: flex-start; margin: 14px 0; }
+/* Drives, and the bulk upload card on the Office server screen */
+.drv { margin-top: 14px; padding: 14px 12px 8px; background: var(--white); border: 1px solid var(--card-line); border-top: 3px solid var(--red); }
+.drv-h { display: flex; align-items: center; gap: 11px; }
+.drv-h .ic { color: var(--red); }
+.tagchips { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 12px; }
+.tagchip { min-height: 72px; display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start; gap: 6px; padding: 11px 10px; text-align: start; border: 1px solid var(--card-line); background: var(--ivory); cursor: pointer; }
+.tagchip b { font: 700 10.5px/1.2 var(--ui); letter-spacing: .12em; text-transform: uppercase; color: var(--ink); }
+.tagchip small { font: 400 12px/1.35 var(--ui); color: var(--grey-2); }
+.tagchip[aria-checked="true"] { background: var(--ink); border-color: var(--ink); box-shadow: inset 0 -3px 0 var(--red); }
+.tagchip[aria-checked="true"] b, .tagchip[aria-checked="true"] small { color: var(--ivory); }
+.tagchip.busy { border-color: var(--red); }
+.tagchip[disabled] { cursor: default; }
+.drv-mean { margin: 10px 0 0; font: 400 13.5px/1.5 var(--ui); color: var(--grey); }
+.drv-scan { display: flex; align-items: center; gap: 8px; margin: 8px 0 0; font: 600 12.5px/1.4 var(--ui); color: var(--gold-ink); }
+.drv-scan.s-failed { color: var(--red-2); }
+.drv-scan.s-done { color: var(--green); }
+.drv .rwhy { margin: 8px 0 0; }
+.btn.drv-forget { margin-top: 4px; padding: 0 2px; color: var(--red-2); font-size: 10px; }
+.drives .drivebtn { margin-top: 16px; }
+.upcard { margin-top: 18px; padding-bottom: 12px; }
+.upcard .tagchips { grid-template-columns: minmax(0, 1fr); }
+.upcard .tagchip { min-height: 60px; }
+.upcard.greyed .tagchip { opacity: .55; }
+.upcard.greyed .tagchip[aria-checked="true"] { opacity: .7; }
+.upcard.greyed .drv-h .rm { color: var(--grey-3); font-weight: 600; }
+
 @media (prefers-reduced-motion: reduce) {
+  .bb-net.swish { animation: none; }
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition: none !important; }
 }
 @media (max-width: 370px) {

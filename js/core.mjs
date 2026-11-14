@@ -341,7 +341,9 @@ export function readServer(json) {
   return {
     version: num(e.version) || 1, copiedAt: str(e.copiedAt), changedAt: str(e.changedAt), machine: str(e.machine),
     counts: numsOf(e.counts, COUNT_KEYS), bytes: numsOf(e.bytes, BYTE_KEYS),
-    bigFiles: big ? { kind: str(big.kind), folder: str(big.folder), uploadedAt: str(big.uploadedAt), pending: num(big.pending), pendingBytes: num(big.pendingBytes) } : null,
+    bigFiles: big ? { kind: str(big.kind), folder: str(big.folder), uploadedAt: str(big.uploadedAt), pending: num(big.pending), pendingBytes: num(big.pendingBytes),
+      // the hub's upload setting as the sync machine last saw it, and what that setting holds back (older copies: missing)
+      mode: ['off', 'recent', 'all'].includes(big.mode) ? big.mode : '', held: 'held' in big ? num(big.held) : null, heldBytes: 'heldBytes' in big ? num(big.heldBytes) : null } : null,
     warnings: arr(e.warnings).map(obj).filter((w) => w && str(w.text)).map((w) => ({ at: str(w.at), text: str(w.text) })),
     latest: arr(e.latest).map((r) => fileOf(r)).filter(Boolean),
     customers: arr(e.customers).map(withId(CUSTOMER_KEYS)).filter(Boolean),
@@ -425,6 +427,135 @@ export const SERVER_SEARCH = {
   quotes: (q) => [q.number, q.ref, q.to, q.subject, q.project, q.year, q.customerName, q.projectName, q.archive ? baseName(q.p) : ''],
   projects: (p) => [p.name, p.owner, p.status, p.path],
 };
+
+// ---------- the hub: lights and where a file can be reached (docs/HUB.md) ----------
+/** "14:10" today, else "12 Nov". */
+export function sinceWords(at, now = Date.now()) {
+  const ms = toMs(at);
+  if (!ms) return '';
+  const d = new Date(ms);
+  return sameDay(d, new Date(now)) ? `${pad(d.getHours())}:${pad(d.getMinutes())}` : `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+}
+/** "seen just now", "seen 2 min ago", "seen 3 h ago", "seen 2 days ago", "never seen". */
+export function seenWords(at, now = Date.now()) {
+  const ms = toMs(at);
+  if (!ms) return 'never seen';
+  const s = Math.max(0, (now - ms) / 1000);
+  if (s < 60) return 'seen just now';
+  if (s < 3600) return `seen ${Math.floor(s / 60)} min ago`;
+  if (s < 86400) return `seen ${Math.floor(s / 3600)} h ago`;
+  const d = Math.floor(s / 86400);
+  return `seen ${d} day${d === 1 ? '' : 's'} ago`;
+}
+/** A light's level -> the dot: 'ok' green, 'late' amber, 'down' red, 'unknown' grey (never, unknown, anything else). */
+export const dotOf = (level) => (level === 'ok' || level === 'late' || level === 'down' ? level : 'unknown');
+const LIGHT_ORDER = { server: 0, imac: 1, github: 2, pc: 3, phone: 4, hub: 5 };
+const lightOf = (lights, kind) => arr(lights).find((l) => l && l.kind === kind) || null;
+const isOk = (l) => !!l && l.level === 'ok';
+const lightRow = (l) => ({ id: str(l.id) || str(l.kind), kind: str(l.kind), name: str(l.name), at: str(l.at), level: str(l.level) || 'never', detail: str(l.detail) });
+const KIND_NAME = { server: 'Office server', imac: 'Office iMac', github: 'GitHub', pc: 'PC', phone: 'Phone', hub: 'Hub' };
+
+/**
+ * The lights the page shows. hub: the answer of /beat or /lights ({ lights }) or null when the hub did not answer.
+ * With the hub: its lights, plus "GitHub from this phone" and "Hub" (this call worked).
+ * Without it ("ping through GitHub"): the office server and the iMac from `_phone/server.json` (copiedAt), GitHub from
+ * this visit, the PC from the snapshot (when it last wrote), this phone, and the hub off.
+ * local: { server, snap, reached, checkedAt, online, now }.
+ */
+export function viewLights(hub, local = {}) {
+  const now = local.now || Date.now();
+  const net = { reached: !!local.reached, checkedAt: local.checkedAt || 0, online: local.online !== false };
+  const here = { id: 'github-here', kind: 'github', name: 'GitHub from this phone', at: net.reached && net.checkedAt ? new Date(net.checkedAt).toISOString() : '',
+    level: net.reached ? 'ok' : net.online ? 'down' : 'unknown', detail: net.reached ? '' : net.online ? 'Not reached' : 'This phone is offline' };
+  if (hub && Array.isArray(hub.lights)) {
+    const list = hub.lights.map(obj).filter((l) => l && l.kind).map(lightRow).map((l) => ({ ...l, name: l.name || KIND_NAME[l.kind] || l.kind }));
+    list.push(here, { id: 'hub', kind: 'hub', name: 'Hub', at: str(hub.now) || new Date(now).toISOString(), level: 'ok', detail: '' });
+    return list.sort((a, b) => (LIGHT_ORDER[a.kind] ?? 9) - (LIGHT_ORDER[b.kind] ?? 9));
+  }
+  const S = local.server, snap = local.snap;
+  const age = S ? serverAge(S.copiedAt, now) : 'never';
+  const level = { fresh: 'ok', old: 'late', stale: 'down', never: 'never' }[age];
+  const copied = S && S.copiedAt ? S.copiedAt : '';
+  return [
+    { id: 'server', kind: 'server', name: 'Office server', at: copied, level, detail: copied ? 'From the last copy on GitHub' : 'No copy from the office server yet' },
+    { id: 'imac', kind: 'imac', name: `Office iMac${S && S.machine ? ` (${S.machine})` : ''}`, at: copied, level, detail: copied ? `Last run ${asOf(copied, now).replace(/^Changed /, '')}` : 'Has not written a copy yet' },
+    here,
+    { id: 'pc', kind: 'pc', name: 'PC', at: '', level: 'unknown', detail: snap && snap.madeAt ? `PC last wrote: ${asOf(snap.madeAt, now).replace(/^Changed /, '')}` : 'PC last wrote: never' },
+    { id: 'phone', kind: 'phone', name: 'This phone', at: '', level: net.online ? 'ok' : 'down', detail: net.online ? 'Online' : 'Offline' },
+    { id: 'hub', kind: 'hub', name: 'Hub', at: '', level: 'down', detail: 'Hub: offline' },
+  ];
+}
+/** The hub answered just now: its light in a lights list. */
+export const hubUp = (lights) => isOk(lightOf(lights, 'hub'));
+
+function offWords(name, l, now) {
+  if (!l || l.level === 'never') return `${name} has not been seen.`;
+  if (l.level === 'unknown') return `Nobody can see ${name.replace(/^The /, 'the ')} right now.`;
+  const t = sinceWords(l.at, now);
+  return t ? `${name} is off since ${t}.` : `${name} is off.`;
+}
+const r2Key = (d) => { const m = /^r2:(.+)$/.exec(typeof d === 'string' ? d : ''); return m && !/(^|\/)\.\.(\/|$)/.test(m[1]) ? m[1] : ''; };
+const said = (label, why) => (why ? `${label}. ${why}` : label);
+
+/**
+ * Where a file of the server index can be reached now, and the words for its row:
+ *   set      g: 1                                          opens from the data repo (as before)
+ *   cloud    d: "r2:<key>" (or a ready ask) and the hub answers   Open (a 5-minute link)
+ *   drive    d: "gd:<id>", or a /drive/find hit            opens in Drive
+ *   ask      no copy, not gone, hub + office iMac + server are ok   Ask the office iMac -> queued -> fetching -> Open
+ *   offline  nothing reachable now                          greyed, with the reason
+ * lights: viewLights(); extra: { ask (the newest ask for this path), found ({ id } a Drive hit), now }.
+ * -> { state, label, why, words, key?, url?, step? }  (words = label and why in one sentence)
+ */
+export function reach(record, lights, extra = {}) {
+  const r = obj(record) || {};
+  const now = extra.now || Date.now();
+  const up = hubUp(lights);
+  const out = (state, label, why = '', more = {}) => ({ state, label, why, words: said(label, why), ...more });
+  if (Number(r.g) === 1) return out('set', 'In the set');
+  const gd = driveUrl(r.d);
+  if (gd) return out('drive', 'In Google Drive', '', { url: gd });
+  const key = r2Key(r.d);
+  if (key) return up ? out('cloud', 'In cloud storage', '', { key }) : out('offline', 'In cloud storage', 'The hub can’t be reached now.', { reason: 'hub' });
+  const hit = obj(extra.found);
+  const hitUrl = hit ? driveUrl(`gd:${str(hit.id)}`) : '';
+  if (hitUrl) return out('drive', 'Found in your Drive', '', { url: hitUrl });
+  if (r.x) return out('offline', 'Gone from the server', 'No copy anywhere.', { reason: 'gone' });
+  const ask = obj(extra.ask);
+  let lastFail = '';
+  if (ask && up) {
+    if (ask.state === 'ready' && r2Key(`r2:${str(ask.key)}`)) return out('cloud', 'Fetched by the office iMac', '', { key: str(ask.key) });
+    if (ask.state === 'queued') return out('ask', 'Asked', 'Waiting for the office iMac.', { step: 'queued' });
+    if (ask.state === 'working') return out('ask', 'Fetching', 'The office iMac is fetching it.', { step: 'fetching' });
+    if (ask.state === 'failed') lastFail = str(ask.why) || 'The office iMac could not fetch it.';
+  }
+  const label = 'Only on the office server';
+  if (!up) return out('offline', label, 'The hub can’t be reached now.', { reason: 'hub' });
+  const im = lightOf(lights, 'imac'), sv = lightOf(lights, 'server');
+  if (!isOk(im)) return out('offline', label, offWords('The office iMac', im, now), { reason: 'imac' });
+  if (!isOk(sv)) return out('offline', label, offWords('The office server', sv, now), { reason: 'server' });
+  return out('ask', label, lastFail ? `Last try: ${lastFail}` : '', { step: lastFail ? 'failed' : '' });
+}
+
+/**
+ * "Big files to the cloud": the three choices of the bulk upload and which one is on.
+ * bigFiles: server.json's piece (mode, held, heldBytes); settings: the hub's answer ({ upload }) or null; up: the hub answers.
+ * -> { choices: [{ value, title, line, on }], mode, greyed, note }. With the hub down the mode is the copy's, greyed.
+ */
+export function uploadChoices(bigFiles, settings, up) {
+  const b = obj(bigFiles) || {};
+  const valid = (v) => (v === 'off' || v === 'recent' || v === 'all' ? v : '');
+  const mode = up ? valid(obj(settings) && settings.upload) || (settings ? 'recent' : valid(b.mode)) : valid(b.mode);
+  const gb = Number.isFinite(b.heldBytes) && b.heldBytes !== null ? `${(b.heldBytes / (1024 * 1024 * 1024)).toFixed(1)} GB` : '';
+  return {
+    mode, greyed: !up, note: up ? '' : 'Hub: offline',
+    choices: [
+      { value: 'recent', title: 'Last month’s drawings', line: 'New drawings only, one copy each. Easy on the office wifi.' },
+      { value: 'all', title: 'Everything', line: gb ? `All big files. Heavy: ${gb} more to send.` : 'All big files. Heavy.' },
+      { value: 'off', title: 'Paused', line: 'Nothing is sent. Asking for one file still works.' },
+    ].map((c) => ({ ...c, on: c.value === mode })),
+  };
+}
 
 /** Distinct years, newest first. */
 export const yearsOf = (list) => [...new Set(arr(list).map((p) => p.year).filter((y) => y))].sort((a, b) => b - a);

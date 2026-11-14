@@ -7,6 +7,7 @@ import { getFile, tryKey, rate } from './gh.mjs';
 import * as store from './store.mjs';
 import * as media from './media.mjs';
 import * as V from './views.mjs';
+import * as hub from './hubui.mjs';
 import { h, clear, icon } from './dom.mjs';
 
 const ls = {
@@ -42,6 +43,9 @@ async function borrowKey(except = '') {
   return false;
 }
 media.setup({ key: () => S.key, onKeyError: () => keyFailed() });
+// the hub logs in with the same key; with no key it never calls anything
+hub.setup({ key: () => S.key, storage: localStorage, ua: navigator.userAgent, xhr: globalThis.XMLHttpRequest,
+  local: () => ({ server: S.server, snap: S.snap, reached: S.reached, checkedAt: S.checkedAt, online: navigator.onLine !== false }) });
 
 let keyFailing = null;
 function keyFailed() {
@@ -110,7 +114,7 @@ function refresh() {
       S.problem = e.code === 'missing' ? 'access' : e.code || 'down';
       if (!S.snap && S.problem === 'access') { showConnect(C.ERRORS.access); }
       else if (!S.snap) render();
-    } finally { S.checking = false; refreshing = null; drawStatus(); }
+    } finally { S.checking = false; refreshing = null; drawStatus(); hub.redraw(); }
   })();
   return refreshing;
 }
@@ -208,10 +212,10 @@ function confirmForget() {
   veil.querySelector('.btn.ghost').focus();
 }
 async function forget() {
-  ls.del(SLOT.key); ls.del(SLOT.keyFrom); ls.del(SLOT.ui);
+  ls.del(SLOT.key); ls.del(SLOT.keyFrom); ls.del(SLOT.ui); ls.del(SLOT.hubDevice); ls.del(SLOT.sound);
   ls.set(SLOT.noBorrow, '1'); // the launcher's key stays the launcher's; this page stops using it until asked
   S.key = ''; S.snap = null; S.server = null; S.serverKeptAt = 0; S.reached = false; S.checkedAt = 0; S.screenState.clear(); S.scroll.clear();
-  media.revokeAll(); media.closeViewer(); media.closeSheet();
+  media.revokeAll(); media.closeViewer(); media.closeSheet(); hub.reset();
   await store.wipe();
   try { for (const k of await caches.keys()) if (k.startsWith('mmis-')) await caches.delete(k); } catch { /* no Cache Storage */ }
   history.replaceState(null, '', location.pathname);
@@ -262,6 +266,8 @@ async function render() {
     case 'workforce': node = id ? V.workerPage(ui, snap, id) : V.workforceList(ui, snap); break;
     case 'quotations': node = id === 'archive' ? V.archiveQuotePage(ui, snap, sub[0]) : id ? V.quotationPage(ui, snap, id) : V.quotationsList(ui, snap); break;
     case 'server': node = id === 'p' ? V.serverProjectPage(ui, snap, sub[0]) : id === 'projects' ? V.serverProjects(ui, snap) : V.serverScreen(ui, snap); break;
+    case 'drop': node = hub.dropScreen(); break;
+    case 'drives': node = hub.drivesScreen(); break;
     case 'drawings': node = id ? V.drawingPage(ui, snap, id) : V.drawingsList(ui, snap); break;
     case 'more': node = V.moreScreen(ui, snap, { checkedAt: S.checkedAt, keyFrom: S.keyFrom, cache: C.fmtSize(await store.cacheBytes()), refresh: () => refresh(), forget: confirmForget }); break;
     default: replaceTo('#/projects'); return;
@@ -273,7 +279,7 @@ async function render() {
   window.scrollTo(0, y || 0);
 }
 function markTab(area) {
-  const home = { suppliers: 'more', workforce: 'more', quotations: 'more', drawings: 'more', server: 'more' }[area] || area || 'projects';
+  const home = { drop: 'more', drives: 'more', suppliers: 'more', workforce: 'more', quotations: 'more', drawings: 'more', server: 'more' }[area] || area || 'projects';
   for (const a of barEl.querySelectorAll('a')) if (a.dataset.tab === home) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
 }
 window.addEventListener('hashchange', (e) => {
@@ -327,6 +333,7 @@ async function start() {
   S.depth = 0;
   await render();
   refresh();
+  hub.start();
 }
 async function boot() {
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js', { scope: './' }).catch(() => { /* the page still works without it */ });
