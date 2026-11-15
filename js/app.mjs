@@ -143,10 +143,14 @@ function drawStatus() {
   if (!S.snap) { statusEl.textContent = S.checking ? 'Getting the copy from the PC…' : ''; return; }
   const level = C.ageLevel(S.snap.madeAt);
   statusEl.className = `asof ${level}${S.problem ? ' problem' : ''}`;
-  statusEl.append(h('span', { class: 'asof-main' }, C.asOf(S.snap.madeAt)));
+  const full = C.asOf(S.snap.madeAt);
+  statusEl.title = full;
+  // the short line is what shows; screen readers get the full sentence (an aria-label on a plain span is not read)
+  statusEl.append(h('span', { class: 'asof-main', 'aria-hidden': 'true' }, C.asOfShort(S.snap.madeAt)), h('span', { class: 'sr-only' }, full));
   // the office server's copy, a quiet second line coloured by its own age (fresh < 5 h, old < 26 h, stale), "never" in grey
   const srvAt = S.server ? S.server.copiedAt : '';
-  statusEl.append(h('span', { class: `asof-srv ${C.serverAge(srvAt)}` }, C.serverLine(srvAt)));
+  statusEl.append(h('span', { class: `asof-srv ${C.serverAge(srvAt)}`, 'aria-hidden': 'true', title: C.serverLine(srvAt) }, C.serverLineShort(srvAt)),
+    h('span', { class: 'sr-only' }, C.serverLine(srvAt)));
   const why = S.problem === 'offline' ? 'Offline' : S.problem === 'rate' ? 'GitHub limit reached' : S.problem === 'access' ? 'Key can’t see the data' : S.problem ? 'GitHub unreachable' : S.checking ? 'checking…' : '';
   if (why) statusEl.append(h('span', { class: 'asof-why' }, why));
 }

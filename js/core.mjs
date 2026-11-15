@@ -180,6 +180,18 @@ export function asOf(madeAt, now = Date.now()) {
     : `${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}, `;
   return `Changed ${day}${clock} (${agoWords(ms, now)})`;
 }
+/** The same moment, short enough for the header pill at 375 px: "14:53 · 26 min ago", "Yesterday 14:53", "Mon 9 Nov · 4 days ago". */
+export function asOfShort(madeAt, now = Date.now()) {
+  const ms = toMs(madeAt);
+  if (!ms) return '';
+  const d = new Date(ms), today = new Date(now), yest = new Date(now - DAY_MS);
+  const clock = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  if (sameDay(d, yest)) return `Yesterday ${clock}`;
+  const s = Math.max(0, (now - ms) / 1000);
+  if (sameDay(d, today)) return s < 60 ? `${clock} · just now` : s < 3600 ? `${clock} · ${Math.floor(s / 60)} min ago` : `${clock} · ${Math.floor(s / 3600)} h ago`;
+  const days = Math.floor(s / 86400);
+  return `${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]} · ${days} ${days === 1 ? 'day' : 'days'} ago`;
+}
 /** How old the copy is: 'fresh' (< 1 h), 'old' (< 1 day), 'stale'. */
 export function ageLevel(madeAt, now = Date.now()) {
   const h = (now - toMs(madeAt)) / 3600000;
@@ -375,6 +387,11 @@ export function serverAge(copiedAt, now = Date.now()) {
 export function serverLine(copiedAt, now = Date.now()) {
   const t = asOf(copiedAt, now);
   return `Server copy: ${t ? t.replace(/^Changed /, '') : 'never'}`;
+}
+/** The same line, short for the header pill: "Server copy 10:49 · 1 h ago", "Server copy yesterday 10:49". */
+export function serverLineShort(copiedAt, now = Date.now()) {
+  const t = asOfShort(copiedAt, now);
+  return t ? `Server copy ${t.replace(/^Yesterday/, 'yesterday').replace(/^[A-Z][a-z]{2} (?=\d)/, '')}` : 'Server copy never';
 }
 /** Where a file of the index lives: 'set' (in the Reference Set), 'drive' (cloud storage: "gd:<Drive id>" or "r2:<path>"), 'gone' (vanished, no copy), 'server' (only there). */
 export function whereOf(row) {
