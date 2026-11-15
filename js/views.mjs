@@ -1,6 +1,6 @@
 // The screens: the eight areas of the snapshot, each a searchable list and a detail page laid out for reading.
 import * as C from './core.mjs';
-import { add, h, clear, icon, txt, ar, kicker, pageHead, facts, section, chip, divChips, note, phoneRow, contactCard, row, join } from './dom.mjs';
+import { add, h, clear, icon, txt, ar, kicker, pageHead, facts, section, chip, divChips, note, phoneRow, contactCard, row, join, avatarOf } from './dom.mjs';
 import { thumb, openFile } from './media.mjs';
 import * as hub from './hubui.mjs';
 
@@ -253,7 +253,7 @@ export function customersList(ui, snap, mode) {
     fieldsOf: C.SEARCH_FIELDS.customers,
     filters: [{ id: 'div', label: 'Division', all: 'All divisions', options: C.divisionsOf(items).map((id) => [id, C.division(id).en]), test: (c, v) => arr(c.divisions).includes(v) }],
     rowOf: (c) => row({
-      href: `#/customers/${encodeURIComponent(c.id)}`, title: c.name, titleAr: c.nameAr,
+      href: `#/customers/${encodeURIComponent(c.id)}`, avatar: true, title: c.name, titleAr: c.nameAr,
       meta: c.serverOnly ? 'From the office quotation archive' : join(c.kindText || '', c.area, arr(c.contacts).length ? `${arr(c.contacts).length} contact${arr(c.contacts).length === 1 ? '' : 's'}` : ''),
       meta2: Number(String(c.unpaidTotal || '0').replace(/,/g, '')) > 0 ? h('span', { class: 'rm amber' }, `${C.kwd(c.unpaidTotal)} unpaid`) : null,
       meta3: serverCounts(c.server),
@@ -325,6 +325,7 @@ export function duesScreen(ui, snap, which) {
       const cu = g.customer && typeof g.customer === 'object' ? g.customer : { name: String(g.customer || '') };
       return h('div', { class: 'dgroup' },
         h('a', { class: 'dg-head', href: cu.id ? `#/customers/${encodeURIComponent(cu.id)}` : null },
+          avatarOf(cu.name || cu.nameAr),
           h('span', { class: 'rtx' }, txt(cu.name || 'Customer', 'rn'), cu.nameAr ? ar(cu.nameAr, 'rar') : null, h('span', { class: 'rm' }, `oldest due ${C.fmtDay(g.oldest)}`)),
           h('span', { class: 'dg-total' }, h('small', null, 'Total'), h('b', null, C.kwd(g.total)))),
         h('div', { class: 'dues' }, arr(g.dues).map((x) => dueRow({ status, ...x }, snap))));
@@ -339,7 +340,7 @@ export function suppliersList(ui, snap) {
   return listScreen(ui, {
     area: 'suppliers', kick: 'Suppliers', title: 'Suppliers', items: arr(d.list), one: 'supplier', many: 'suppliers', placeholder: 'Search name, maker, family',
     fieldsOf: C.SEARCH_FIELDS.suppliers,
-    rowOf: (s) => row({ href: `#/suppliers/${encodeURIComponent(s.id)}`, title: s.name, titleAr: s.nameAr,
+    rowOf: (s) => row({ href: `#/suppliers/${encodeURIComponent(s.id)}`, avatar: true, title: s.name, titleAr: s.nameAr,
       meta: join(arr(s.families).map(cap), s.specCount ? `${s.specCount} spec sheet${s.specCount === 1 ? '' : 's'}` : ''),
       meta2: arr(s.makers).length && arr(s.makers).join(', ') !== s.name ? `Makers: ${arr(s.makers).join(', ')}` : '' }),
   });
@@ -445,7 +446,7 @@ export function workforceList(ui, snap) {
     empty: 'No workers in the copy from the PC yet.', fieldsOf: C.SEARCH_FIELDS.workforce,
     top: items.length ? h('p', { class: 'lede' }, 'The paper that runs out first is on top.') : null,
     filters: [{ id: 'st', label: 'Status', all: 'Every status', options: [['active', 'Active'], ['on-leave', 'On leave'], ['left', 'Left']], test: (w, v) => w.status === v }],
-    rowOf: (w) => row({ href: `#/workforce/${encodeURIComponent(w.id)}`, title: w.name, titleAr: w.nameAr,
+    rowOf: (w) => row({ href: `#/workforce/${encodeURIComponent(w.id)}`, avatar: true, title: w.name, titleAr: w.nameAr,
       meta: join(w.jobTitle, w.nationality), meta2: w.status && w.status !== 'active' ? C.workerStatus(w.status) : '', end: expiryChip(w) }),
   });
 }

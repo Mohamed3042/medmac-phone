@@ -1,6 +1,5 @@
 Fonts on this page, each under the SIL Open Font License, Version 1.1 (text below):
 - Sora: Copyright 2019 The Sora Project Authors (github.com/sora-xor/sora-font)
-- Cinzel: Copyright 2020 The Cinzel Project Authors (github.com/NDISCOVER/Cinzel)
 - IBM Plex Sans Arabic: Copyright 2017 IBM Corp. (github.com/IBM/plex)
 
 -----------------------------------------------------------

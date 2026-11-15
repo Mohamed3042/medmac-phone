@@ -1,5 +1,5 @@
 // Small DOM helpers and the shared pieces every screen uses (rows, facts, phones, chips, icons).
-import { phoneInfo, phonesOf, hasArabic, division } from './core.mjs';
+import { phoneInfo, phonesOf, hasArabic, division, initials } from './core.mjs';
 
 export function h(tag, attrs, ...kids) {
   const el = document.createElement(tag);
@@ -107,9 +107,9 @@ export function contactCard(c, extra) {
 }
 
 /** One list row: link, optional thumb, title (+ Arabic), up to three meta lines, and an end column. */
-export function row({ href, thumb, title, titleAr, meta, meta2, meta3, end, cls = '' }) {
+export function row({ href, thumb, avatar, title, titleAr, meta, meta2, meta3, end, cls = '' }) {
   return h('a', { class: `row ${cls}`.trim(), href },
-    thumb || null,
+    thumb || (avatar ? avatarOf(title || titleAr) : null),
     h('span', { class: 'rtx' },
       txt(title || '—', 'rn'),
       titleAr ? ar(titleAr, 'rar') : null,
@@ -118,6 +118,31 @@ export function row({ href, thumb, title, titleAr, meta, meta2, meta3, end, cls 
       meta3 ? (meta3.nodeType ? meta3 : h('span', { class: 'rm', dir: 'auto' }, meta3)) : null),
     end ? h('span', { class: 'rend' }, end) : null,
     icon('chev', 'ic chev'));
+}
+/** The round initials of a company, person or supplier (Arabic names take the Arabic face). */
+export function avatarOf(name, cls = '') {
+  const t = initials(name);
+  return h('span', { class: `av${hasArabic(t) ? ' av-ar' : ''} ${cls}`.trim(), 'aria-hidden': 'true' }, t);
+}
+/** n grey placeholder rows (round dot + two bars) shown while something loads; decorative, so hidden from screen readers. */
+export function skeletonRows(n = 6) {
+  const box = h('div', { class: 'sk-list', 'aria-hidden': 'true' });
+  for (let i = 0; i < n; i += 1) {
+    box.append(h('div', { class: 'sk-row' }, h('i', { class: 'sk-dot' }),
+      h('span', { class: 'sk-lines' }, h('i', { class: 'sk-a', style: { width: `${52 + ((i * 17) % 34)}%` } }), h('i', { class: 'sk-b', style: { width: `${30 + ((i * 11) % 24)}%` } }))));
+  }
+  return box;
+}
+/** A loading box: a line for screen readers plus the skeleton rows. */
+export function loadingBox(label = 'Loading…', n = 6) {
+  return h('div', { class: 'list-loading', role: 'status' }, h('span', { class: 'sr-only' }, label), skeletonRows(n));
+}
+/** The plain failure line with a Retry button (one card, role=alert). */
+export function failLine(text, onRetry, detail) {
+  const label = h('span', null, 'Retry');
+  const btn = h('button', { class: 'btn pri load-retry', type: 'button' }, icon('refresh'), label);
+  btn.addEventListener('click', () => { btn.disabled = true; label.textContent = 'Trying…'; onRetry(); });
+  return h('div', { class: 'load-fail', role: 'alert' }, h('p', { class: 'load-fail-line' }, text), detail ? h('p', { class: 'small load-fail-more' }, detail) : null, btn);
 }
 export const dot = ' · ';
 export const join = (...parts) => parts.flat().filter((x) => x != null && x !== '').join(dot);

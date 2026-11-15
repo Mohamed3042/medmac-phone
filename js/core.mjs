@@ -561,3 +561,29 @@ export function uploadChoices(bigFiles, settings, up) {
 export const yearsOf = (list) => [...new Set(arr(list).map((p) => p.year).filter((y) => y))].sort((a, b) => b - a);
 export const divisionsOf = (list) => { const s = new Set(arr(list).flatMap((p) => arr(p.divisions).concat(p.division ? [p.division] : []))); return DIVISIONS.map((d) => d[0]).filter((id) => s.has(id)); };
 export const hasArabic = (s) => /[؀-ۿ]/.test(String(s || ''));
+
+// ---------- round initials (same rule as the app's list-state.js `initials`; this page is a separate shell and cannot import it) ----------
+const SKIP_EN = new Set(['the', 'a', 'an', 'of', 'and', '&', 'co', 'co.', 'company', 'est', 'llc', 'wll']);
+const LAST_EN = new Set(['trading', 'contracting', 'contractors', 'cont']);
+const SKIP_AR = new Set(['\u0634\u0631\u0643\u0629', '\u0645\u0624\u0633\u0633\u0629', '\u0645\u0643\u062a\u0628', '\u0645\u0635\u0646\u0639', '\u0648\u0631\u0634\u0629']); // company, establishment, office, factory, workshop
+/** Two letters for a round avatar: "North Star Co" -> "NS", "12 Tower Co" -> "12", an Arabic name -> its first letter. */
+export function initials(name) {
+  const words = String(name || '').replace(/\bw\.?\s?l\.?\s?l\b\.?/gi, ' ').replace(/[()[\]{}.,;:"'`/\|+*_-]+/g, ' ').trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return '?';
+  if (/[؀-ۿ]/.test(words[0]) || words.every((w) => /[؀-ۿ]/.test(w))) {
+    const bare = words.filter((x) => !SKIP_AR.has(x)).map((w) => (w.length > 3 && w.startsWith('\u0627\u0644') ? w.slice(2) : w));
+    const use = bare.length ? bare : words;
+    const a = [...use[0]][0] || '?';
+    if (!/^[آأإا]/.test(a)) return a;
+    if (use.length > 1) return [...use[1]][0] || a;
+    return [...use[0]][1] || a;
+  }
+  const first = words[0];
+  if (/^\d/.test(first)) return first.replace(/\D/g, '').slice(0, 2) || first.slice(0, 2);
+  const keep = words.filter((w) => !SKIP_EN.has(w.toLowerCase()));
+  while (keep.length > 1 && LAST_EN.has(keep[keep.length - 1].toLowerCase())) keep.pop();
+  const use = keep.length ? keep : words;
+  const a = [...use[0]][0] || '';
+  const b = use.length > 1 ? ([...use[use.length - 1]][0] || '') : ([...use[0]][1] || '');
+  return (a + b).toUpperCase();
+}

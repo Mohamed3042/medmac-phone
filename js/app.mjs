@@ -8,7 +8,7 @@ import * as store from './store.mjs';
 import * as media from './media.mjs';
 import * as V from './views.mjs';
 import * as hub from './hubui.mjs';
-import { h, clear, icon } from './dom.mjs';
+import { h, clear, icon, loadingBox, failLine } from './dom.mjs';
 
 const ls = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -248,10 +248,9 @@ async function render() {
   media.closeSheet();
   if (!isViewer) media.closeViewer();
   if (!S.snap) {
-    clear(mainEl).append(h('section', { class: 'page' }, h('div', { class: 'loading' }, S.problem
-      ? h('div', { class: 'callout warn' }, h('p', null, h('b', null, C.ERRORS[S.problem] || C.ERRORS.down)), h('p', null, 'Nothing is kept on this phone yet, so there is nothing to show. Try again when you have a connection.'),
-        h('button', { class: 'btn', type: 'button', onclick: () => refresh() }, icon('refresh'), 'Try again'))
-      : h('p', { class: 'wait' }, h('span', { class: 'spinner' }), 'Getting the copy from the PC…'))));
+    clear(mainEl).append(h('section', { class: 'page' }, S.problem
+      ? failLine(C.ERRORS[S.problem] || C.ERRORS.down, () => refresh(), 'Nothing is kept on this phone yet, so there is nothing to show. Try again when you have a connection.')
+      : loadingBox('Getting the copy from the PC…', 7)));
     markTab(area);
     return;
   }

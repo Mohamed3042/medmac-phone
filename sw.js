@@ -1,12 +1,12 @@
 // The shell's service worker: the page's own files, cache-first, so it opens with no network.
 // It never touches GitHub's API or the hub: the snapshot, photos and papers live in IndexedDB (keyed by path), not here.
 // VERSION is stamped by scripts/publish-phone-page.mjs (a hash of the shell); a new value replaces the old cache.
-const VERSION = 've273c8d679d5';
+const VERSION = 'v897cb9f1ce34';
 const CACHE = `mmis-shell-${VERSION}`;
 const SHELL = [
   './', './index.html', './app.css', './manifest.webmanifest',
   './js/app.mjs', './js/config.mjs', './js/core.mjs', './js/dom.mjs', './js/gh.mjs', './js/hoop.mjs', './js/hub.mjs', './js/hubui.mjs', './js/media.mjs', './js/store.mjs', './js/views.mjs',
-  './fonts/Sora-wght.ttf', './fonts/Cinzel-latin.woff2', './fonts/PlexArabic-400.woff2', './fonts/PlexArabic-600.woff2',
+  './fonts/Sora-wght.ttf', './fonts/PlexArabic-400.woff2', './fonts/PlexArabic-600.woff2',
   './icons/icon.svg', './icons/icon-192.png', './icons/apple-touch-icon.png',
 ];
 
