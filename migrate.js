@@ -3,7 +3,7 @@
 // and sends the visitor to its own origin. It never touches other apps' keys (mkl.*, mkc.*, ...).
 (function (root) {
   'use strict';
-  var NEW_ORIGIN = 'https://medmac-phone.pages.dev';
+  var NEW_ORIGIN = 'https://medmac-phone.job-orbit-cloud.workers.dev';
   var PREFIX = 'mmis.';              // every key the old phone page wrote: mmis.key, mmis.keyFrom, mmis.noBorrow, mmis.ui, ...
   var DB_NAME = 'medmac-phone';      // its IndexedDB (cached snapshot, photos, papers)
   var CACHE_PREFIX = 'mmis-shell-';  // its service-worker caches; other pages' caches are left alone
