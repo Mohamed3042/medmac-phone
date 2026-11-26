@@ -21,6 +21,12 @@
   function target(hash) {
     return NEW_ORIGIN + '/' + (/^#\/[A-Za-z0-9_\/-]{0,80}$/.test(hash || '') ? hash : '');
   }
+  // The old phone page was served from this path; every other page on the origin (Launcher Backup, Cinema, ...) has its own
+  // scope and keeps its service worker.
+  var OLD_SCOPE_PATH = '/medmac-phone/';
+  function isOldPhoneScope(scope) {
+    try { var p = new URL(scope).pathname; return p === OLD_SCOPE_PATH || p.indexOf(OLD_SCOPE_PATH) === 0; } catch (e) { return false; }
+  }
   function cleanup(env) {
     var gone = clearStorage(env.localStorage);
     var jobs = [];
@@ -29,21 +35,30 @@
       if (env.caches) jobs.push(env.caches.keys().then(function (ks) { return Promise.all(ks.filter(function (k) { return k.indexOf(CACHE_PREFIX) === 0; }).map(function (k) { return env.caches.delete(k); })); }));
     } catch (e) { /* ignore */ }
     try {
-      if (env.serviceWorker) jobs.push(env.serviceWorker.getRegistrations().then(function (rs) { return Promise.all(rs.map(function (x) { return x.unregister(); })); }));
+      if (env.serviceWorker) jobs.push(env.serviceWorker.getRegistrations().then(function (rs) {
+        return Promise.all(rs.filter(function (x) { return isOldPhoneScope(x.scope); }).map(function (x) { return x.unregister(); }));
+      }));
     } catch (e) { /* ignore */ }
     return Promise.all(jobs.map(function (j) { return j.catch(function () {}); })).then(function () { return gone; });
   }
-  function run(win) {
-    var env = { localStorage: win.localStorage, indexedDB: win.indexedDB, caches: win.caches, serviceWorker: win.navigator && win.navigator.serviceWorker };
-    var go = target(win.location.hash);
-    var link = win.document && win.document.getElementById('go');
-    if (link) link.setAttribute('href', go);
+  // storage / service-worker getters throw a SecurityError when the browser blocks them: each read is guarded
+  function safe(fn) { try { return fn(); } catch (e) { return undefined; } }
+  function run(win, timeoutMs) {
+    var go = NEW_ORIGIN + '/';
     var done = false;
     var leave = function () { if (!done) { done = true; win.location.replace(go); } };
-    cleanup(env).then(leave, leave);
-    setTimeout(leave, 2500); // never trap the visitor if a cleanup call hangs (the keys are already gone by then)
+    setTimeout(leave, timeoutMs || 2500); // armed first: never trap the visitor, whatever below throws or hangs
+    go = safe(function () { return target(win.location.hash); }) || go;
+    safe(function () { var link = win.document && win.document.getElementById('go'); if (link) link.setAttribute('href', go); });
+    var env = {
+      localStorage: safe(function () { return win.localStorage; }),
+      indexedDB: safe(function () { return win.indexedDB; }),
+      caches: safe(function () { return win.caches; }),
+      serviceWorker: safe(function () { return win.navigator && win.navigator.serviceWorker; }),
+    };
+    try { cleanup(env).then(leave, leave); } catch (e) { leave(); }
   }
-  var api = { NEW_ORIGIN: NEW_ORIGIN, clearStorage: clearStorage, target: target, cleanup: cleanup, run: run };
+  var api = { isOldPhoneScope: isOldPhoneScope, NEW_ORIGIN: NEW_ORIGIN, clearStorage: clearStorage, target: target, cleanup: cleanup, run: run };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else run(root);
 })(typeof window !== 'undefined' ? window : this);
